@@ -1,118 +1,133 @@
-name: CI - Deploy Lambda Code
+name: Deploy Lambda Functions
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - "lambda/lambda_handler.py"
-      - "lambda/requirements.txt"
+      - "lambda/**/*.py"
+      - "lambda/**/requirements.txt"
   workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   deploy-lambda:
     runs-on: ubuntu-latest
 
-    # Required for OIDC
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials via OIDC
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: us-west-1
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Build Lambda Package
-        working-directory: lambda
+      - name: Package Main Lambda
         run: |
-          echo "Building Lambda deployment package..."
-          rm -f lambda_function.zip
+          echo "📦 Building Main Lambda package..."
+          cd lambda
 
           # Install dependencies if requirements.txt exists
           if [ -f "requirements.txt" ]; then
-            echo "Installing dependencies..."
-            python -m pip install --upgrade pip
-            mkdir -p package
             pip install -r requirements.txt -t package/
-            
-            # Copy Lambda handler
             cp lambda_handler.py package/
-            
-            # Create zip from package
             cd package
-            zip -r ../lambda_function.zip . -q
-            cd ..
-            
-            # Cleanup
-            rm -rf package
+            zip -r ../../lambda_function.zip . -q
+            cd ../..
+            rm -rf lambda/package
           else
-            echo "No requirements.txt found, packaging handler only..."
             zip -r lambda_function.zip lambda_handler.py -q
           fi
 
-          # Show package size
-          ls -lh lambda_function.zip
+          echo "✅ Main Lambda package created: $(ls -lh lambda_function.zip | awk '{print $5}')"
 
-      - name: Move zip to root for Terraform
+      - name: Package Cost Savings Lambda
         run: |
-          mv lambda/lambda_function.zip ./lambda_function.zip
-          echo "✅ Lambda package ready for Terraform"
+          echo "📦 Building Cost Savings Lambda package..."
+          cd lambda
+          zip -r ../cost_savings_function.zip cost_savings_calculator.py pricing.py -q
+          cd ..
+          echo "✅ Cost Savings Lambda package created: $(ls -lh cost_savings_function.zip | awk '{print $5}')"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.5
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Plan (Lambda only)
+      - name: Update Main Lambda Function
         run: |
-          echo "Planning Lambda update..."
-          terraform plan -target=aws_lambda_function.costguardian -out=tfplan
+          echo "🚀 Deploying Main Lambda..."
+          aws lambda update-function-code \
+            --function-name costguardian-prod-main \
+            --zip-file fileb://lambda_function.zip \
+            --output json | jq -r '.LastModified'
 
-      - name: Terraform Apply (Lambda only)
-        run: |
-          echo "Deploying Lambda via Terraform..."
-          terraform apply -auto-approve tfplan
-          echo "✅ Lambda deployed successfully!"
+          echo "✅ Main Lambda updated successfully"
 
-      - name: Get Lambda Function Name
-        id: lambda-name
+      - name: Update Cost Savings Lambda Function
         run: |
-          FUNCTION_NAME=$(terraform output -raw lambda_function_name)
-          echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
-          echo "Lambda function: $FUNCTION_NAME"
+          echo "🚀 Deploying Cost Savings Lambda..."
+          aws lambda update-function-code \
+            --function-name costguardian-prod-cost-savings \
+            --zip-file fileb://cost_savings_function.zip \
+            --output json | jq -r '.LastModified'
 
-      - name: Test Lambda Invocation
+          echo "✅ Cost Savings Lambda updated successfully"
+
+      - name: Wait for Lambda updates to complete
         run: |
-          echo "Testing Lambda function..."
+          echo "⏳ Waiting for Lambda functions to be ready..."
+          aws lambda wait function-updated --function-name costguardian-prod-main
+          aws lambda wait function-updated --function-name costguardian-prod-cost-savings
+          echo "✅ All Lambda functions are ready!"
+
+      - name: Test Main Lambda
+        run: |
+          echo "🧪 Testing Main Lambda..."
           aws lambda invoke \
-            --function-name ${{ steps.lambda-name.outputs.function_name }} \
+            --function-name costguardian-prod-main \
             --payload '{}' \
             --log-type Tail \
-            response.json \
-            --query 'LogResult' \
-            --output text | base64 -d
+            response.json > /dev/null 2>&1
 
-          echo ""
           echo "Response:"
           cat response.json
+          echo ""
+
+      - name: Test Cost Savings Lambda
+        run: |
+          echo "🧪 Testing Cost Savings Lambda..."
+          aws lambda invoke \
+            --function-name costguardian-prod-cost-savings \
+            --payload '{}' \
+            --log-type Tail \
+            response2.json > /dev/null 2>&1
+
+          echo "Response:"
+          cat response2.json
+          echo ""
 
       - name: View Recent Logs
         if: always()
         run: |
-          echo "Recent Lambda logs (last 5 minutes):"
-          aws logs tail /aws/lambda/${{ steps.lambda-name.outputs.function_name }} \
-            --since 5m \
-            --format short
+          echo "📋 Recent Main Lambda logs:"
+          aws logs tail /aws/lambda/costguardian-prod-main --since 5m --format short || echo "No logs available"
+
+          echo ""
+          echo "📋 Recent Cost Savings Lambda logs:"
+          aws logs tail /aws/lambda/costguardian-prod-cost-savings --since 5m --format short || echo "No logs available"
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "✅ Deployment Summary:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Main Lambda: costguardian-prod-main"
+          echo "✅ Cost Savings Lambda: costguardian-prod-cost-savings"
+          echo "✅ Both functions updated successfully!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -28,8 +28,8 @@ SNS_TOPIC_ARN = os.getenv('SNS_TOPIC_ARN')
 
 
 # Grace period configuration
-GRACE_PERIOD_DAYS = 1  # Days to wait before deletion (0 = immediate, 7 = one week)
-SKIP_QUARANTINE = False  # True = skip stopping, delete immediately after 3 idle checks
+GRACE_PERIOD_DAYS = 0  # Days to wait before deletion (0 = immediate, 7 = one week)
+SKIP_QUARANTINE = True  # True = skip stopping, delete immediately after 3 idle checks
 
 # Idle detection threshold
 IDLE_CHECKS_BEFORE_ACTION = 1  # Number of consecutive idle checks before action

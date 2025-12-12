@@ -1,4 +1,4 @@
-# test.tf - Minimal single-resource version of CostGuardian test stack
+# test.tf - Create 2 of each resource type for CostGuardian testing
 
 terraform {
   required_version = ">= 1.0"
@@ -27,12 +27,18 @@ variable "aws_region" {
 variable "test_prefix" {
   description = "Prefix for test resource names"
   type        = string
-  default     = "costguardian-test-single"
+  default     = "costguardian-test-2x"
 }
 
+variable "resource_count" {
+  description = "Number of each resource type to create"
+  type        = number
+  default     = 2
+}
 
-# VPC and Networking (shared)
-
+# =============================================================================
+# Shared Networking (VPC + 2 subnets + IGW)
+# =============================================================================
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -47,11 +53,10 @@ resource "aws_vpc" "test_vpc" {
     Name        = "${var.test_prefix}-vpc"
     Environment = "test"
     ManagedBy   = "terraform"
-    Purpose     = "CostGuardian-Single-Testing"
+    Purpose     = "CostGuardian-Testing"
   }
 }
 
-# ALB requires at least two subnets in different AZs
 resource "aws_subnet" "test_subnet" {
   count             = 2
   vpc_id            = aws_vpc.test_vpc.id
@@ -75,15 +80,16 @@ resource "aws_internet_gateway" "test_igw" {
   }
 }
 
-
-# 1. Elastic IP (unattached)
-
+# =============================================================================
+# 1) Elastic IPs (2) - unattached
+# =============================================================================
 
 resource "aws_eip" "test_eip" {
+  count  = var.resource_count
   domain = "vpc"
 
   tags = {
-    Name        = "${var.test_prefix}-eip-1"
+    Name        = "${var.test_prefix}-eip-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -91,27 +97,28 @@ resource "aws_eip" "test_eip" {
   }
 }
 
-# NAT EIP (for the NAT gateway)
+# =============================================================================
+# 2) NAT Gateways (2) + their EIPs
+# =============================================================================
+
 resource "aws_eip" "nat_eip" {
+  count  = var.resource_count
   domain = "vpc"
 
   tags = {
-    Name        = "${var.test_prefix}-nat-eip-1"
+    Name        = "${var.test_prefix}-nat-eip-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
   }
 }
 
-
-# 2. NAT Gateway
-
-
 resource "aws_nat_gateway" "test_nat" {
-  allocation_id = aws_eip.nat_eip.id
+  count         = var.resource_count
+  allocation_id = aws_eip.nat_eip[count.index].id
   subnet_id     = aws_subnet.test_subnet[0].id
 
   tags = {
-    Name        = "${var.test_prefix}-nat-1"
+    Name        = "${var.test_prefix}-nat-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -121,9 +128,9 @@ resource "aws_nat_gateway" "test_nat" {
   depends_on = [aws_internet_gateway.test_igw]
 }
 
-
-# 3. EC2 instance
-
+# =============================================================================
+# 3) EC2 Instances (2)
+# =============================================================================
 
 data "aws_ami" "amazon_linux_2" {
   most_recent = true
@@ -141,12 +148,13 @@ data "aws_ami" "amazon_linux_2" {
 }
 
 resource "aws_instance" "test_ec2" {
+  count         = var.resource_count
   ami           = data.aws_ami.amazon_linux_2.id
   instance_type = "t3.micro"
   subnet_id     = aws_subnet.test_subnet[0].id
 
   tags = {
-    Name        = "${var.test_prefix}-ec2-1"
+    Name        = "${var.test_prefix}-ec2-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -158,16 +166,17 @@ resource "aws_instance" "test_ec2" {
   }
 }
 
-
-# 4. EBS Volume (unattached)
-
+# =============================================================================
+# 4) EBS Volumes (2) - unattached
+# =============================================================================
 
 resource "aws_ebs_volume" "test_volume" {
+  count             = var.resource_count
   availability_zone = data.aws_availability_zones.available.names[0]
   size              = 8
 
   tags = {
-    Name        = "${var.test_prefix}-ebs-1"
+    Name        = "${var.test_prefix}-ebs-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -175,9 +184,9 @@ resource "aws_ebs_volume" "test_volume" {
   }
 }
 
-
-# 5. RDS Instance
-
+# =============================================================================
+# 5) RDS Instances (2)
+# =============================================================================
 
 resource "aws_db_subnet_group" "test_db_subnet" {
   name       = "${var.test_prefix}-db-subnet"
@@ -192,7 +201,7 @@ resource "aws_db_subnet_group" "test_db_subnet" {
 
 resource "aws_security_group" "test_rds_sg" {
   name        = "${var.test_prefix}-rds-sg"
-  description = "Security group for test RDS instance"
+  description = "Security group for test RDS instances"
   vpc_id      = aws_vpc.test_vpc.id
 
   ingress {
@@ -217,21 +226,22 @@ resource "aws_security_group" "test_rds_sg" {
 }
 
 resource "aws_db_instance" "test_rds" {
-  identifier             = "${var.test_prefix}-rds-1"
+  count                  = var.resource_count
+  identifier             = "${var.test_prefix}-rds-${count.index + 1}"
   engine                 = "mysql"
   engine_version         = "8.0"
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
   storage_type           = "gp2"
   username               = "admin"
-  password               = "TestPassword123!"
+  password               = "TestPassword123!" # change for real use
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.test_db_subnet.name
   vpc_security_group_ids = [aws_security_group.test_rds_sg.id]
   publicly_accessible    = false
 
   tags = {
-    Name        = "${var.test_prefix}-rds-1"
+    Name        = "${var.test_prefix}-rds-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -239,9 +249,9 @@ resource "aws_db_instance" "test_rds" {
   }
 }
 
-
-# 6. Load Balancer (ALB + TG + Listener)
-
+# =============================================================================
+# 6) Load Balancers (2) + Target Groups (2) + Listeners (2)
+# =============================================================================
 
 resource "aws_security_group" "test_alb_sg" {
   name        = "${var.test_prefix}-alb-sg"
@@ -270,14 +280,15 @@ resource "aws_security_group" "test_alb_sg" {
 }
 
 resource "aws_lb" "test_alb" {
-  name               = "${var.test_prefix}-alb-1"
+  count              = var.resource_count
+  name               = "${var.test_prefix}-alb-${count.index + 1}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.test_alb_sg.id]
   subnets            = aws_subnet.test_subnet[*].id
 
   tags = {
-    Name        = "${var.test_prefix}-alb-1"
+    Name        = "${var.test_prefix}-alb-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -286,7 +297,8 @@ resource "aws_lb" "test_alb" {
 }
 
 resource "aws_lb_target_group" "test_tg" {
-  name     = "${var.test_prefix}-tg-1"
+  count    = var.resource_count
+  name     = "${var.test_prefix}-tg-${count.index + 1}"
   port     = 80
   protocol = "HTTP"
   vpc_id   = aws_vpc.test_vpc.id
@@ -304,33 +316,35 @@ resource "aws_lb_target_group" "test_tg" {
   }
 
   tags = {
-    Name        = "${var.test_prefix}-tg-1"
+    Name        = "${var.test_prefix}-tg-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
   }
 }
 
 resource "aws_lb_listener" "test_listener" {
-  load_balancer_arn = aws_lb.test_alb.arn
-  port              = "80"
+  count             = var.resource_count
+  load_balancer_arn = aws_lb.test_alb[count.index].arn
+  port              = 80
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.test_tg.arn
+    target_group_arn = aws_lb_target_group.test_tg[count.index].arn
   }
 }
 
-
-# 7. EBS Snapshot
-
+# =============================================================================
+# 7) EBS Snapshots (2)
+# =============================================================================
 
 resource "aws_ebs_snapshot" "test_snapshot" {
-  volume_id   = aws_ebs_volume.test_volume.id
-  description = "Test snapshot for CostGuardian - 1"
+  count       = var.resource_count
+  volume_id   = aws_ebs_volume.test_volume[count.index].id
+  description = "Test snapshot for CostGuardian - ${count.index + 1}"
 
   tags = {
-    Name        = "${var.test_prefix}-snapshot-1"
+    Name        = "${var.test_prefix}-snapshot-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -338,19 +352,21 @@ resource "aws_ebs_snapshot" "test_snapshot" {
   }
 }
 
-
-# 8. S3 Bucket (empty)
-
+# =============================================================================
+# 8) S3 Buckets (2)
+# =============================================================================
 
 resource "random_id" "bucket_suffix" {
+  count       = var.resource_count
   byte_length = 4
 }
 
 resource "aws_s3_bucket" "test_bucket" {
-  bucket = "${var.test_prefix}-bucket-1-${random_id.bucket_suffix.hex}"
+  count  = var.resource_count
+  bucket = "${var.test_prefix}-bucket-${count.index + 1}-${random_id.bucket_suffix[count.index].hex}"
 
   tags = {
-    Name        = "${var.test_prefix}-bucket-1"
+    Name        = "${var.test_prefix}-bucket-${count.index + 1}"
     Environment = "test"
     ManagedBy   = "terraform"
     Purpose     = "idle-test"
@@ -358,23 +374,26 @@ resource "aws_s3_bucket" "test_bucket" {
   }
 }
 
-
-# Simple outputs
-
+# =============================================================================
+# Outputs
+# =============================================================================
 
 output "created_resources" {
   value = {
     vpc_id           = aws_vpc.test_vpc.id
     subnets          = aws_subnet.test_subnet[*].id
-    elastic_ip_id    = aws_eip.test_eip.id
-    nat_gateway_id   = aws_nat_gateway.test_nat.id
-    ec2_instance_id  = aws_instance.test_ec2.id
-    ebs_volume_id    = aws_ebs_volume.test_volume.id
-    rds_instance_id  = aws_db_instance.test_rds.id
-    alb_arn          = aws_lb.test_alb.arn
-    target_group_arn = aws_lb_target_group.test_tg.arn
-    alb_listener_arn = aws_lb_listener.test_listener.arn
-    ebs_snapshot_id  = aws_ebs_snapshot.test_snapshot.id
-    s3_bucket_name   = aws_s3_bucket.test_bucket.bucket
+
+    elastic_ip_ids   = aws_eip.test_eip[*].id
+    nat_gateway_ids  = aws_nat_gateway.test_nat[*].id
+    ec2_instance_ids = aws_instance.test_ec2[*].id
+    ebs_volume_ids   = aws_ebs_volume.test_volume[*].id
+    rds_instance_ids = aws_db_instance.test_rds[*].id
+
+    alb_arns         = aws_lb.test_alb[*].arn
+    target_group_arns = aws_lb_target_group.test_tg[*].arn
+    listener_arns    = aws_lb_listener.test_listener[*].arn
+
+    snapshot_ids     = aws_ebs_snapshot.test_snapshot[*].id
+    s3_bucket_names  = aws_s3_bucket.test_bucket[*].bucket
   }
 }
