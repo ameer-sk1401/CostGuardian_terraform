@@ -129,6 +129,16 @@ output "ci_cd_environment_variables" {
   }
 }
 
+output "cost_savings_lambda_name" {
+  description = "Name of the cost savings calculator Lambda function"
+  value       = aws_lambda_function.cost_savings.function_name
+}
+
+output "dashboard_url" {
+  description = "URL to access the CostGuardian savings dashboard"
+  value       = "http://${aws_s3_bucket.backups.bucket}.s3-website-${data.aws_region.current.name}.amazonaws.com/dashboard/"
+}
+
 
 # Post-Deployment Instructions
 

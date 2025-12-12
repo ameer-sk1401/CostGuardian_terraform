@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "lambda/**/*.py"
+      - "lambda/lambda_handler.py"
       - "lambda/requirements.txt"
   workflow_dispatch:
 
@@ -25,7 +25,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
-          aws-region: us-east-1
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Setup Python
         uses: actions/setup-python@v5

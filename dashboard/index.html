@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CostGuardian - Savings Dashboard</title>
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .last-updated {
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .metric-card.savings .metric-value {
+            color: #10b981;
+        }
+
+        .metric-card.resources .metric-value {
+            color: #667eea;
+        }
+
+        .metric-card.cumulative .metric-value {
+            color: #f59e0b;
+        }
+
+        .metric-subtitle {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .table-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .service-breakdown {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 10px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .service-icon {
+            width: 50px;
+            height: 50px;
+            background: #667eea;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .service-details {
+            flex: 1;
+        }
+
+        .service-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .service-count {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .service-savings {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #10b981;
+        }
+
+        .download-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .download-btn {
+            background: #667eea;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            cursor: pointer;
+            margin-right: 15px;
+            margin-bottom: 10px;
+            transition: background 0.3s ease;
+        }
+
+        .download-btn:hover {
+            background: #5568d3;
+        }
+
+        .download-btn.csv {
+            background: #10b981;
+        }
+
+        .download-btn.csv:hover {
+            background: #059669;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+            font-size: 1.5em;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .metric-value {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🛡️ CostGuardian Savings Dashboard</h1>
+            <p>Real-time monitoring of AWS cost optimizations</p>
+            <div class="last-updated" id="lastUpdated">Loading...</div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading">
+            <p>Loading dashboard data...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="error" style="display: none;">
+            <strong>Error loading data:</strong>
+            <p id="errorMessage"></p>
+        </div>
+
+        <!-- Main Content (hidden until loaded) -->
+        <div id="mainContent" style="display: none;">
+            
+            <!-- Metrics Cards -->
+            <div class="metrics-grid">
+                <div class="metric-card savings">
+                    <div class="metric-label">Total Savings This Month</div>
+                    <div class="metric-value" id="totalSavings">$0.00</div>
+                    <div class="metric-subtitle">Per month savings</div>
+                </div>
+
+                <div class="metric-card resources">
+                    <div class="metric-label">Resources Deleted</div>
+                    <div class="metric-value" id="totalResources">0</div>
+                    <div class="metric-subtitle">This month</div>
+                </div>
+
+                <div class="metric-card cumulative">
+                    <div class="metric-label">Cumulative Savings</div>
+                    <div class="metric-value" id="cumulativeSavings">$0.00</div>
+                    <div class="metric-subtitle">All time</div>
+                </div>
+            </div>
+
+            <!-- Service Breakdown -->
+            <div class="table-card">
+                <h2 class="chart-title">💰 Savings by Service</h2>
+                <div id="serviceBreakdown"></div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">📊 Service Distribution</h3>
+                    <canvas id="pieChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3 class="chart-title">📈 Historical Savings (Last 6 Months)</h3>
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Resource Details Table -->
+            <div class="table-card">
+                <h2 class="chart-title">🗑️ Deleted Resources Detail</h2>
+                <table id="resourcesTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Resource ID</th>
+                            <th>Type</th>
+                            <th>Size</th>
+                            <th>Monthly Savings</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resourcesTableBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Download Reports -->
+            <div class="download-section">
+                <h2 class="chart-title">📥 Download Reports</h2>
+                <p style="margin-bottom: 20px; color: #666;">Download detailed monthly reports</p>
+                
+                <button class="download-btn" onclick="downloadCurrentJSON()">
+                    📄 Current Month (JSON)
+                </button>
+                <button class="download-btn csv" onclick="downloadCurrentCSV()">
+                    📊 Current Month (CSV)
+                </button>
+                
+                <div style="margin-top: 20px;">
+                    <label for="monthSelect" style="margin-right: 10px; font-weight: 600;">Historical Reports:</label>
+                    <select id="monthSelect" style="padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                        <option value="">Select a month...</option>
+                    </select>
+                    <button class="download-btn" onclick="downloadHistoricalReport()">
+                        Download Selected
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>
