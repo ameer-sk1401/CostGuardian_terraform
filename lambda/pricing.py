@@ -1,9 +1,3 @@
-"""
-AWS Pricing Data for CostGuardian Savings Calculator
-====================================================
-Updated: January 2025
-Region: us-east-1 (update for other regions)
-"""
 
 # Hourly rates in USD
 AWS_PRICING = {

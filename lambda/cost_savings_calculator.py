@@ -1,8 +1,3 @@
-"""
-CostGuardian - Cost Savings Calculator Lambda
-==============================================
-Reads DynamoDB logs, calculates savings, generates dashboard data
-"""
 
 import json
 import boto3
