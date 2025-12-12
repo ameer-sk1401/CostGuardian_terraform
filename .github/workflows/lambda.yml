@@ -1,0 +1,118 @@
+name: CI - Deploy Lambda Code
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lambda/**/*.py"
+      - "lambda/requirements.txt"
+  workflow_dispatch:
+
+jobs:
+  deploy-lambda:
+    runs-on: ubuntu-latest
+
+    # Required for OIDC
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build Lambda Package
+        working-directory: lambda
+        run: |
+          echo "Building Lambda deployment package..."
+          rm -f lambda_function.zip
+
+          # Install dependencies if requirements.txt exists
+          if [ -f "requirements.txt" ]; then
+            echo "Installing dependencies..."
+            python -m pip install --upgrade pip
+            mkdir -p package
+            pip install -r requirements.txt -t package/
+            
+            # Copy Lambda handler
+            cp lambda_handler.py package/
+            
+            # Create zip from package
+            cd package
+            zip -r ../lambda_function.zip . -q
+            cd ..
+            
+            # Cleanup
+            rm -rf package
+          else
+            echo "No requirements.txt found, packaging handler only..."
+            zip -r lambda_function.zip lambda_handler.py -q
+          fi
+
+          # Show package size
+          ls -lh lambda_function.zip
+
+      - name: Move zip to root for Terraform
+        run: |
+          mv lambda/lambda_function.zip ./lambda_function.zip
+          echo "✅ Lambda package ready for Terraform"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan (Lambda only)
+        run: |
+          echo "Planning Lambda update..."
+          terraform plan -target=aws_lambda_function.costguardian -out=tfplan
+
+      - name: Terraform Apply (Lambda only)
+        run: |
+          echo "Deploying Lambda via Terraform..."
+          terraform apply -auto-approve tfplan
+          echo "✅ Lambda deployed successfully!"
+
+      - name: Get Lambda Function Name
+        id: lambda-name
+        run: |
+          FUNCTION_NAME=$(terraform output -raw lambda_function_name)
+          echo "function_name=$FUNCTION_NAME" >> $GITHUB_OUTPUT
+          echo "Lambda function: $FUNCTION_NAME"
+
+      - name: Test Lambda Invocation
+        run: |
+          echo "Testing Lambda function..."
+          aws lambda invoke \
+            --function-name ${{ steps.lambda-name.outputs.function_name }} \
+            --payload '{}' \
+            --log-type Tail \
+            response.json \
+            --query 'LogResult' \
+            --output text | base64 -d
+
+          echo ""
+          echo "Response:"
+          cat response.json
+
+      - name: View Recent Logs
+        if: always()
+        run: |
+          echo "Recent Lambda logs (last 5 minutes):"
+          aws logs tail /aws/lambda/${{ steps.lambda-name.outputs.function_name }} \
+            --since 5m \
+            --format short
