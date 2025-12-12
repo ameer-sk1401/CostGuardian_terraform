@@ -11,6 +11,7 @@ on:
 jobs:
   deploy-infrastructure:
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       id-token: write
       contents: read
@@ -34,12 +35,10 @@ jobs:
           terraform init
 
       - name: Plan Terraform
-        run: |
-          terraform plan -out=terraform.plan
+        run: terraform plan -out=terraform.plan
 
       - name: Apply Terraform
-        run: |
-          terraform apply terraout=terraform.plan
+        run: terraform apply -auto-approve terraform.plan
       - name: Save Outputs
         run: |
           terraform output -json > terraform-outputs.json
