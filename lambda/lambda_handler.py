@@ -76,14 +76,7 @@ DELETE_ORPHANED_SUBNETS = True            # Delete subnets with no resources
 
 
 def send_cloudwatch_metric(metric_name, value, unit='Count'):
-    """
-    Sends a custom metric to CloudWatch for dashboard visualization
     
-    Args:
-        metric_name: Name of the metric (e.g., 'MonthlySavings')
-        value: Numeric value to send
-        unit: CloudWatch unit (Count, None, etc.)
-    """
     try:
         cloudwatch.put_metric_data(
             Namespace='CostGuardian',
@@ -96,16 +89,16 @@ def send_cloudwatch_metric(metric_name, value, unit='Count'):
                 }
             ]
         )
-        print(f"  📊 Sent metric: {metric_name} = {value}")
+        print(f"   Sent metric: {metric_name} = {value}")
     except Exception as e:
-        print(f"  ⚠️  Failed to send metric {metric_name}: {str(e)}")
+        print(f"    Failed to send metric {metric_name}: {str(e)}")
 
 
 
 def lambda_handler(event, context):
     
     validate_configuration()
-    print("🚀 CostGuardian EC2 Monitor started...")
+    print(" CostGuardian EC2 Monitor started...")
     
     # Get reference to DynamoDB table
     table = dynamodb.Table(DYNAMODB_TABLE)
@@ -121,7 +114,7 @@ def lambda_handler(event, context):
     
     try:
        
-        print("📋 Fetching all EC2 instances...")
+        print(" Fetching all EC2 instances...")
     
         response = ec2_client.describe_instances()
     
@@ -136,26 +129,26 @@ def lambda_handler(event, context):
         
         # If no instances, will exit
         if len(all_instances) == 0:
-            print("✅ No EC2 instances found. Nothing to monitor!")
+            print(" No EC2 instances found. Nothing to monitor!")
         else:
-        # ============================================
+         
         # STEP 2: CHECK EACH INSTANCE (STATE MACHINE)
-        # ============================================
+         
             for instance in all_instances:
                 instance_id = instance['InstanceId']
                 instance_state = instance['State']['Name']
                 
-                print(f"\n🔍 Checking instance: {instance_id} (State: {instance_state})")
+                print(f"\n Checking instance: {instance_id} (State: {instance_state})")
                 
                 # Skip terminated instances
                 if instance_state == 'terminated':
-                    print(f"  ⏭️  Skipping (already terminated)")
+                    print(f"    Skipping (already terminated)")
                     continue
                 
                 # Check for protection tag
                 tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}
                 if tags.get('CostGuardian') == 'Ignore':
-                    print(f"  ⏭️  Skipping (protected with CostGuardian=Ignore tag)")
+                    print(f"    Skipping (protected with CostGuardian=Ignore tag)")
                     continue
                 
                 try:
@@ -165,26 +158,26 @@ def lambda_handler(event, context):
                     # Get current CPU metrics (only if running)
                     if instance_state == 'running':
                         cpu_usage = get_cpu_utilization(instance_id)
-                        print(f"  📊 Average CPU (24h): {cpu_usage:.2f}%")
+                        print(f"   Average CPU (24h): {cpu_usage:.2f}%")
                     else:
                         # Instance is stopped - treat as idle
                         cpu_usage = 0.0
-                        print(f"  📊 Instance is {instance_state}, treating as idle (CPU: 0%)")
+                        print(f"   Instance is {instance_state}, treating as idle (CPU: 0%)")
                     
                     # Determine what action to take based on history
                     action, idle_count, quarantine_date = determine_action(history, cpu_usage)
-                    print(f"  🎯 Recommended action: {action} (idle count: {idle_count})")
+                    print(f"   Recommended action: {action} (idle count: {idle_count})")
                     
-                    # ============================================
+                     
                     # EXECUTE ACTION BASED ON STATE MACHINE
-                    # ============================================
+                     
                     
                     if action == 'ACTIVE':
                         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                         # STATE: ACTIVE
                         # Instance is being used, just log it
                         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                        print(f"  ✅ Instance is ACTIVE (CPU >= {CPU_IDLE_THRESHOLD}%)")
+                        print(f"   Instance is ACTIVE (CPU >= {CPU_IDLE_THRESHOLD}%)")
                         stats['active_instances'] += 1
                         
                         table.put_item(Item={
@@ -204,7 +197,7 @@ def lambda_handler(event, context):
                         # First or second idle detection
                         # Action: Backup config + send warning email
                         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                        print(f"  ⚠️  IDLE WARNING (detection #{idle_count + 1})")
+                        print(f"    IDLE WARNING (detection #{idle_count + 1})")
                         stats['idle_instances'] += 1
                         
                         # Create backup
@@ -236,12 +229,12 @@ def lambda_handler(event, context):
                         # Idle for 3+ checks
                         # Action: Stop instance + create AMI
                         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                        print(f"  🛑 QUARANTINE STATE (idle for {idle_count} checks)")
+                        print(f"   QUARANTINE STATE (idle for {idle_count} checks)")
                         stats['idle_instances'] += 1
                         
                         # Only stop if currently running
                         if instance_state == 'running':
-                            print(f"  🛑 Instance is RUNNING - initiating STOP sequence")
+                            print(f"   Instance is RUNNING - initiating STOP sequence")
                             
                             # Final backup before stopping
                             backup_success = backup_instance_config(instance, instance_id)
@@ -269,11 +262,11 @@ def lambda_handler(event, context):
                                 # Send quarantine email
                                 send_quarantine_alert(instance, instance_id, ami_id, idle_count)
                             else:
-                                print(f"  ❌ Failed to stop instance - will retry next check")
+                                print(f"   Failed to stop instance - will retry next check")
                                 stats['errors'] += 1
                         else:
                             # Instance already stopped
-                            print(f"  ℹ️  Instance already stopped - monitoring grace period")
+                            print(f"   Instance already stopped - monitoring grace period")
                             
                             # Just log the check
                             table.put_item(Item={
@@ -295,7 +288,7 @@ def lambda_handler(event, context):
                         # Grace period expired (7+ days stopped)
                         # Action: Terminate instance + cleanup SGs
                         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                        print(f"  🗑️  DELETE STATE (quarantined for 7+ days)")
+                        print(f"   DELETE STATE (quarantined for 7+ days)")
                         
                         # Verify backups exist before deleting
                         s3_key_prefix = f'ec2-configs/{instance_id}/'
@@ -308,7 +301,7 @@ def lambda_handler(event, context):
                             )
                             
                             if s3_response.get('KeyCount', 0) > 0:
-                                print(f"  ✅ S3 backups verified - safe to terminate")
+                                print(f"   S3 backups verified - safe to terminate")
                                 
                                 # Step 1: Terminate the instance
                                 terminate_success = terminate_instance(instance_id)
@@ -316,11 +309,11 @@ def lambda_handler(event, context):
                                 if terminate_success:
                                     # Step 2: Wait a moment for termination to process
                                     import time
-                                    print(f"  ⏳ Waiting 5 seconds for termination to complete...")
+                                    print(f"   Waiting 5 seconds for termination to complete...")
                                     time.sleep(5)
                                     
                                     # Step 3: Clean up security groups
-                                    print(f"  🧹 Cleaning up associated security groups...")
+                                    print(f"   Cleaning up associated security groups...")
                                     deleted_sgs = delete_security_groups(instance)
                                     
                                     # Log deletion with SG cleanup info
@@ -342,32 +335,32 @@ def lambda_handler(event, context):
                                     # Send deletion confirmation email with SG info
                                     send_deletion_alert(instance, instance_id, deleted_sgs)
                                     
-                                    print(f"  ✅ Instance and associated resources cleaned up successfully")
+                                    print(f"  Instance and associated resources cleaned up successfully")
                                 else:
-                                    print(f"  ❌ Termination failed - will retry next check")
+                                    print(f"   Termination failed - will retry next check")
                                     stats['errors'] += 1
                             else:
-                                print(f"  ❌ ERROR: No S3 backups found!")
-                                print(f"  🛡️  SAFETY: Refusing to delete without backups")
-                                print(f"  ⏭️  Skipping deletion - will check backup status next time")
+                                print(f"   ERROR: No S3 backups found!")
+                                print(f"    SAFETY: Refusing to delete without backups")
+                                print(f"    Skipping deletion - will check backup status next time")
                                 stats['errors'] += 1
                         
                         except Exception as e:
-                            print(f"  ❌ Error verifying backups: {str(e)}")
-                            print(f"  🛡️  SAFETY: Refusing to delete due to verification error")
+                            print(f"   Error verifying backups: {str(e)}")
+                            print(f"    SAFETY: Refusing to delete due to verification error")
                             stats['errors'] += 1
                 
                 except Exception as e:
-                    print(f"  ❌ Error processing instance {instance_id}: {str(e)}")
+                    print(f"   Error processing instance {instance_id}: {str(e)}")
                     import traceback
-                    print(f"  🔍 Traceback: {traceback.format_exc()}")
+                    print(f"   Traceback: {traceback.format_exc()}")
                     stats['errors'] += 1
                 
-        # ============================================
+         
         # STEP 3: CHECK NAT GATEWAYS
-        # ============================================
+         
         print(f"\n" + "="*50)
-        print(f"🌐 NAT GATEWAY MONITORING")
+        print(f" NAT GATEWAY MONITORING")
         print("="*50)
         
         # Get all NAT Gateways
@@ -384,12 +377,12 @@ def lambda_handler(event, context):
         for nat_gw in nat_gateways:
             nat_gw_id = nat_gw['NatGatewayId']
             
-            print(f"\n🔍 Checking NAT Gateway: {nat_gw_id}")
+            print(f"\n Checking NAT Gateway: {nat_gw_id}")
             
             # Check for protection tag
             tags = {tag['Key']: tag['Value'] for tag in nat_gw.get('Tags', [])}
             if tags.get('CostGuardian') == 'Ignore':
-                print(f"  ⏭️  Skipping (protected with CostGuardian=Ignore tag)")
+                print(f"    Skipping (protected with CostGuardian=Ignore tag)")
                 continue
             
             try:
@@ -409,7 +402,7 @@ def lambda_handler(event, context):
                 
                 if not is_idle:
                     # NAT Gateway is active
-                    print(f"  ✅ NAT Gateway is ACTIVE")
+                    print(f"   NAT Gateway is ACTIVE")
                     nat_stats['active'] += 1
                     
                     table.put_item(Item={
@@ -426,7 +419,7 @@ def lambda_handler(event, context):
                 
                 elif idle_count < 3:
                     # First or second idle detection
-                    print(f"  ⚠️  NAT Gateway IDLE (detection #{idle_count + 1}/3)")
+                    print(f"   NAT Gateway IDLE (detection #{idle_count + 1}/3)")
                     nat_stats['idle'] += 1
                     
                     # Backup configuration
@@ -453,7 +446,7 @@ def lambda_handler(event, context):
                 
                 else:
                     # Idle for 3+ checks - time to delete
-                    print(f"  🗑️  NAT Gateway idle for {idle_count + 1} checks - DELETING")
+                    print(f"   NAT Gateway idle for {idle_count + 1} checks - DELETING")
                     nat_stats['idle'] += 1
                     
                     # Final backup
@@ -475,7 +468,7 @@ def lambda_handler(event, context):
                             'DeletedDate': datetime.now().isoformat(),
                             'ConfigBackupPath': f's3://{S3_BUCKET}/nat-gateway-configs/{nat_gw_id}/',
                             'ElasticIpReleased': eip_released,
-                            'EstimatedMonthlySavings': str(32.40 + (3.60 if eip_released else 0)),  # ✅ STRING
+                            'EstimatedMonthlySavings': str(32.40 + (3.60 if eip_released else 0)),  #   STRING
                             'VpcId': nat_gw.get('VpcId'),
                             'SubnetId': nat_gw.get('SubnetId')
                         })
@@ -486,14 +479,14 @@ def lambda_handler(event, context):
                         nat_stats['errors'] += 1
             
             except Exception as e:
-                print(f"  ❌ Error processing NAT Gateway {nat_gw_id}: {str(e)}")
+                print(f"   Error processing NAT Gateway {nat_gw_id}: {str(e)}")
                 nat_stats['errors'] += 1
                 
-        # ============================================
+         
         # STEP 4: CHECK ELASTIC IPS
-        # ============================================
+         
         print(f"\n" + "="*50)
-        print(f"💰 ELASTIC IP MONITORING")
+        print(f"  ELASTIC IP MONITORING")
         print("="*50)
         
         # Get all Elastic IPs
@@ -511,12 +504,12 @@ def lambda_handler(event, context):
             allocation_id = eip.get('AllocationId')
             public_ip = eip.get('PublicIp')
             
-            print(f"\n🔍 Checking Elastic IP: {public_ip} ({allocation_id})")
+            print(f"\n Checking Elastic IP: {public_ip} ({allocation_id})")
             
             # Check for protection tag
             tags = {tag['Key']: tag['Value'] for tag in eip.get('Tags', [])}
             if tags.get('CostGuardian') == 'Ignore':
-                print(f"  ⏭️  Skipping (protected with CostGuardian=Ignore tag)")
+                print(f"    Skipping (protected with CostGuardian=Ignore tag)")
                 continue
             
             try:
@@ -525,11 +518,11 @@ def lambda_handler(event, context):
                 
                 if not is_unattached:
                     # EIP is attached to something
-                    print(f"  ✅ Elastic IP is ATTACHED")
+                    print(f"   Elastic IP is ATTACHED")
                     if association_details.get('InstanceId'):
-                        print(f"     → Instance: {association_details.get('InstanceId')}")
+                        print(f"      Instance: {association_details.get('InstanceId')}")
                     if association_details.get('NetworkInterfaceId'):
-                        print(f"     → Network Interface: {association_details.get('NetworkInterfaceId')}")
+                        print(f"      Network Interface: {association_details.get('NetworkInterfaceId')}")
                     
                     eip_stats['attached'] += 1
                     
@@ -546,7 +539,7 @@ def lambda_handler(event, context):
                 
                 else:
                     # EIP is unattached
-                    print(f"  ⚠️  Elastic IP is UNATTACHED (costing $3.60/month)")
+                    print(f"    Elastic IP is UNATTACHED (costing $3.60/month)")
                     eip_stats['unattached'] += 1
                     
                     # Get history
@@ -562,7 +555,7 @@ def lambda_handler(event, context):
                     
                     if unattached_count < 3:
                         # First, second, or third detection
-                        print(f"  ⚠️  Unattached detection #{unattached_count + 1}/3")
+                        print(f"    Unattached detection #{unattached_count + 1}/3")
                         
                         # Log to DynamoDB
                         table.put_item(Item={
@@ -582,7 +575,7 @@ def lambda_handler(event, context):
                     
                     else:
                         # Unattached for 3+ checks - release it
-                        print(f"  🗑️  Unattached for {unattached_count + 1} checks - RELEASING")
+                        print(f"    Unattached for {unattached_count + 1} checks - RELEASING")
                         
                         release_success = release_elastic_ip(allocation_id, public_ip)
                         
@@ -607,14 +600,14 @@ def lambda_handler(event, context):
                             eip_stats['errors'] += 1
             
             except Exception as e:
-                print(f"  ❌ Error processing Elastic IP {allocation_id}: {str(e)}")
+                print(f"   Error processing Elastic IP {allocation_id}: {str(e)}")
                 eip_stats['errors'] += 1
         
-        # ============================================
+         
         # STEP 5: CHECK RDS INSTANCES
-        # ============================================
+         
         print(f"\n" + "="*50)
-        print(f"🗄️  RDS DATABASE MONITORING")
+        print(f"  RDS DATABASE MONITORING")
         print("="*50)
         
         # Get all RDS instances
@@ -630,26 +623,26 @@ def lambda_handler(event, context):
         }
         
         if rds_client is None:
-            print("❌ Could not initialize RDS client")
+            print(" Could not initialize RDS client")
         else:
             for db_instance in rds_instances:
                 db_instance_identifier = db_instance['DBInstanceIdentifier']
                 db_status = db_instance['DBInstanceStatus']
                 
-                print(f"\n🔍 Checking RDS Instance: {db_instance_identifier}")
-                print(f"  📊 Status: {db_status}")
-                print(f"  🔧 Class: {db_instance.get('DBInstanceClass')}")
-                print(f"  🗄️  Engine: {db_instance.get('Engine')} {db_instance.get('EngineVersion')}")
+                print(f"\n Checking RDS Instance: {db_instance_identifier}")
+                print(f"   Status: {db_status}")
+                print(f"   Class: {db_instance.get('DBInstanceClass')}")
+                print(f"    Engine: {db_instance.get('Engine')} {db_instance.get('EngineVersion')}")
                 
                 # Skip if not available (creating, deleting, etc.)
                 if db_status not in ['available', 'stopped']:
-                    print(f"  ⏭️  Skipping (status: {db_status})")
+                    print(f"    Skipping (status: {db_status})")
                     continue
                 
                 # Check for protection tag
                 tags = {tag['Key']: tag['Value'] for tag in db_instance.get('TagList', [])}
                 if tags.get('CostGuardian') == 'Ignore':
-                    print(f"  ⏭️  Skipping (protected with CostGuardian=Ignore tag)")
+                    print(f"    Skipping (protected with CostGuardian=Ignore tag)")
                     continue
                 
                 try:
@@ -665,7 +658,7 @@ def lambda_handler(event, context):
                         avg_cpu = 0
                         total_iops = 0
                         is_idle = True
-                        print(f"  📊 Database is stopped, treating as idle")
+                        print(f"   Database is stopped, treating as idle")
                     
                     # Count consecutive idle checks
                     idle_count = 0
@@ -677,7 +670,7 @@ def lambda_handler(event, context):
                     
                     if not is_idle:
                         # RDS instance is active
-                        print(f"  ✅ RDS Instance is ACTIVE")
+                        print(f"   RDS Instance is ACTIVE")
                         rds_stats['active'] += 1
                         
                         table.put_item(Item={
@@ -695,7 +688,7 @@ def lambda_handler(event, context):
                     
                     elif idle_count < 3:
                         # First, second, or third idle detection
-                        print(f"  ⚠️  RDS Instance IDLE (detection #{idle_count + 1}/3)")
+                        print(f"    RDS Instance IDLE (detection #{idle_count + 1}/3)")
                         rds_stats['idle'] += 1
                         
                         # Backup configuration
@@ -724,7 +717,7 @@ def lambda_handler(event, context):
                     
                     else:
                         # Idle for 3+ checks - time to stop/delete
-                        print(f"  🛑 RDS Instance idle for {idle_count + 1} checks")
+                        print(f"   RDS Instance idle for {idle_count + 1} checks")
                         rds_stats['idle'] += 1
                         
                         # Final backup
@@ -740,7 +733,7 @@ def lambda_handler(event, context):
                             
                             if db_status == 'available':
                                 # Database is running - STOP it
-                                print(f"  🛑 Database is RUNNING - initiating STOP")
+                                print(f"   Database is RUNNING - initiating STOP")
                                 
                                 stop_success = stop_rds_instance(db_instance_identifier, rds_client)
                                 
@@ -768,7 +761,7 @@ def lambda_handler(event, context):
                             
                             elif db_status == 'stopped':
                                 # Database already stopped - check how long
-                                print(f"  ℹ️  Database already stopped")
+                                print(f"    Database already stopped")
                                 
                                 # Find when it was stopped
                                 stopped_date = None
@@ -779,11 +772,11 @@ def lambda_handler(event, context):
                                 
                                 if stopped_date:
                                     days_stopped = (datetime.now().timestamp() - float(stopped_date)) / 86400
-                                    print(f"  ⏱️  Stopped for {days_stopped:.1f} days")
+                                    print(f"   Stopped for {days_stopped:.1f} days")
                                     
                                     if days_stopped >= 7:
                                         # Stopped for 7+ days - DELETE
-                                        print(f"  🗑️  Grace period expired - DELETING")
+                                        print(f"    Grace period expired - DELETING")
                                         
                                         delete_success = delete_rds_instance(db_instance_identifier, snapshot_id, rds_client)
                                         
@@ -816,7 +809,7 @@ def lambda_handler(event, context):
                                             rds_stats['errors'] += 1
                                     else:
                                         # Still in grace period
-                                        print(f"  ⏳ Grace period: {7 - days_stopped:.1f} days remaining")
+                                        print(f"    Grace period: {7 - days_stopped:.1f} days remaining")
                                         
                                         # Just log the check
                                         table.put_item(Item={
@@ -829,21 +822,21 @@ def lambda_handler(event, context):
                                             'DaysStopped': str(days_stopped)
                                         })
                                 else:
-                                    print(f"  ⚠️  Could not find stopped date in history")
+                                    print(f"    Could not find stopped date in history")
                         else:
-                            print(f"  ❌ Snapshot creation failed - skipping stop/delete")
+                            print(f"  Snapshot creation failed - skipping stop/delete")
                             rds_stats['errors'] += 1
                 
                 except Exception as e:
-                    print(f"  ❌ Error processing RDS instance {db_instance_identifier}: {str(e)}")
+                    print(f"   Error processing RDS instance {db_instance_identifier}: {str(e)}")
                     import traceback
-                    print(f"  🔍 Traceback: {traceback.format_exc()}")
+                    print(f"    Traceback: {traceback.format_exc()}")
                     rds_stats['errors'] += 1
-            # ============================================
+             
         # STEP 6: CHECK S3 BUCKETS
-        # ============================================
+         
         print(f"\n" + "="*50)
-        print(f"🗄️  S3 BUCKET MONITORING")
+        print(f"  S3 BUCKET MONITORING")
         print("="*50)
         
         # Get all S3 buckets
@@ -862,7 +855,7 @@ def lambda_handler(event, context):
         for bucket in s3_buckets:
             bucket_name = bucket['Name']
             
-            print(f"\n🔍 Checking S3 Bucket: {bucket_name}")
+            print(f"\n Checking S3 Bucket: {bucket_name}")
             
             try:
                 # Get bucket tags
@@ -870,7 +863,7 @@ def lambda_handler(event, context):
                 
                 # Check for protection tags
                 if tags.get('CostGuardianBucket') == 'Protected' or tags.get('CostGuardianBucket') == 'Prime':
-                    print(f"  ⏭️  Skipping (protected bucket)")
+                    print(f"    Skipping (protected bucket)")
                     s3_stats['protected'] += 1
                     continue
                 
@@ -878,7 +871,7 @@ def lambda_handler(event, context):
                 is_empty, object_count, size_mb = is_bucket_empty(bucket_name)
                 
                 if is_empty:
-                    print(f"  ⚠️  Bucket is EMPTY")
+                    print(f"   Bucket is EMPTY")
                     s3_stats['empty'] += 1
                     
                     # Get history from DynamoDB
@@ -894,7 +887,7 @@ def lambda_handler(event, context):
                     
                     if empty_count < 3:
                         # First, second, or third empty detection
-                        print(f"  ⚠️  Empty detection #{empty_count + 1}/3")
+                        print(f"    Empty detection #{empty_count + 1}/3")
                         
                         # Log to DynamoDB
                         table.put_item(Item={
@@ -914,7 +907,7 @@ def lambda_handler(event, context):
                     
                     else:
                         # Empty for 3+ checks - delete it
-                        print(f"  🗑️  Empty for {empty_count + 1} checks - DELETING")
+                        print(f"    Empty for {empty_count + 1} checks - DELETING")
                         
                         delete_success = delete_empty_bucket(bucket_name)
                         
@@ -939,20 +932,20 @@ def lambda_handler(event, context):
                 
                 else:
                     # Bucket has data
-                    print(f"  ✅ Bucket has data ({object_count:,} objects, {size_mb:.2f} MB)")
+                    print(f"   Bucket has data ({object_count:,} objects, {size_mb:.2f} MB)")
                     s3_stats['has_data'] += 1
                     
                     # Check if lifecycle policy exists
                     try:
                         s3_client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
-                        print(f"  ℹ️  Lifecycle policy already exists")
+                        print(f"    Lifecycle policy already exists")
                     
                     except s3_client.exceptions.ClientError as e:
                         error_code = e.response['Error']['Code']
                         
                         if error_code == 'NoSuchLifecycleConfiguration':
                             # No lifecycle policy - apply one
-                            print(f"  📋 No lifecycle policy found - applying 3-tier optimization")
+                            print(f"   No lifecycle policy found - applying 3-tier optimization")
                             
                             lifecycle_success = apply_lifecycle_policy(bucket_name)
                             
@@ -988,14 +981,14 @@ def lambda_handler(event, context):
                     })
             
             except Exception as e:
-                print(f"  ❌ Error processing bucket {bucket_name}: {str(e)}")
+                print(f"   Error processing bucket {bucket_name}: {str(e)}")
                 s3_stats['errors'] += 1
         
-        # ============================================
+         
         # STEP 7: CHECK EBS VOLUMES
-        # ============================================
+         
         print(f"\n" + "="*50)
-        print(f"💾 EBS VOLUME MONITORING")
+        print(f"  EBS VOLUME MONITORING")
         print("="*50)
         
         # Get all EBS volumes
@@ -1020,19 +1013,19 @@ def lambda_handler(event, context):
             tags = {tag['Key']: tag['Value'] for tag in volume.get('Tags', [])}
             volume_name = tags.get('Name', 'Unnamed')
             
-            print(f"\n🔍 Checking EBS Volume: {volume_id}")
-            print(f"  📊 Name: {volume_name}")
-            print(f"  📊 Size: {size_gb} GB ({volume_type})")
-            print(f"  📊 State: {volume_state}")
+            print(f"\n Checking EBS Volume: {volume_id}")
+            print(f"  Name: {volume_name}")
+            print(f"   Size: {size_gb} GB ({volume_type})")
+            print(f"   State: {volume_state}")
             
             # Skip volumes that are being created/deleted
             if volume_state in ['creating', 'deleting']:
-                print(f"  ⏭️  Skipping (status: {volume_state})")
+                print(f"     Skipping (status: {volume_state})")
                 continue
             
             # Check for protection tag
             if tags.get('CostGuardian') == 'Ignore':
-                print(f"  ⏭️  Skipping (protected with CostGuardian=Ignore tag)")
+                print(f"     Skipping (protected with CostGuardian=Ignore tag)")
                 continue
             
             try:
@@ -1042,9 +1035,9 @@ def lambda_handler(event, context):
                     if attachments:
                         instance_id = attachments[0].get('InstanceId')
                         device = attachments[0].get('Device')
-                        print(f"  ✅ Volume is IN-USE (attached to {instance_id} as {device})")
+                        print(f"    Volume is IN-USE (attached to {instance_id} as {device})")
                     else:
-                        print(f"  ✅ Volume is IN-USE")
+                        print(f"    Volume is IN-USE")
                     
                     ebs_stats['in_use'] += 1
                     
@@ -1064,8 +1057,8 @@ def lambda_handler(event, context):
                     # Volume is unattached (available for attachment)
                     estimated_cost = get_ebs_volume_cost(volume_type, size_gb, volume.get('Iops'))
                     
-                    print(f"  ⚠️  Volume is AVAILABLE (unattached)")
-                    print(f"  💸 Monthly waste: ${estimated_cost:.2f}")
+                    print(f"     Volume is AVAILABLE (unattached)")
+                    print(f"    Monthly waste: ${estimated_cost:.2f}")
                     
                     ebs_stats['available'] += 1
                     
@@ -1082,7 +1075,7 @@ def lambda_handler(event, context):
                     
                     if available_count < 3:
                         # First, second, or third detection
-                        print(f"  ⚠️  Unattached detection #{available_count + 1}/3")
+                        print(f"     Unattached detection #{available_count + 1}/3")
                         
                         # Backup configuration
                         backup_success = backup_ebs_volume_config(volume)
@@ -1108,7 +1101,7 @@ def lambda_handler(event, context):
                     
                     else:
                         # Unattached for 3+ checks - create snapshot and delete
-                        print(f"  🗑️  Unattached for {available_count + 1} checks - DELETING")
+                        print(f"    Unattached for {available_count + 1} checks - DELETING")
                         
                         # Final backup
                         backup_success = backup_ebs_volume_config(volume)
@@ -1121,7 +1114,7 @@ def lambda_handler(event, context):
                             
                             # Wait a moment for snapshot to initialize
                             import time
-                            print(f"  ⏳ Waiting 5 seconds for snapshot to initialize...")
+                            print(f"    Waiting 5 seconds for snapshot to initialize...")
                             time.sleep(5)
                             
                             # Delete volume
@@ -1154,24 +1147,24 @@ def lambda_handler(event, context):
                                 # Send deletion email
                                 send_ebs_volume_alert(volume, 'DELETED', snapshot_id)
                                 
-                                print(f"  ✅ Volume deleted successfully")
-                                print(f"  💰 Net monthly savings: ${net_savings:.2f}")
-                                print(f"  📸 Snapshot preserved: {snapshot_id} (costs ${snapshot_cost:.2f}/month)")
+                                print(f"    Volume deleted successfully")
+                                print(f"    Net monthly savings: ${net_savings:.2f}")
+                                print(f"    Snapshot preserved: {snapshot_id} (costs ${snapshot_cost:.2f}/month)")
                             else:
                                 ebs_stats['errors'] += 1
                         else:
-                            print(f"  ❌ Snapshot creation failed - skipping deletion")
+                            print(f"    Snapshot creation failed - skipping deletion")
                             ebs_stats['errors'] += 1
             
             except Exception as e:
-                print(f"  ❌ Error processing volume {volume_id}: {str(e)}")
+                print(f"    Error processing volume {volume_id}: {str(e)}")
                 import traceback
-                print(f"  🔍 Traceback: {traceback.format_exc()}")
+                print(f"    Traceback: {traceback.format_exc()}")
                 ebs_stats['errors'] += 1
         
-        # ============================================
+         
         # STEP 8: CHECK LOAD BALANCERS (ALB/NLB)
-        # ============================================
+         
         if ENABLE_LB_MONITORING:
             print(f"\n" + "="*50)
             print(f"⚖️  LOAD BALANCER MONITORING (ALB/NLB)")
@@ -1193,9 +1186,9 @@ def lambda_handler(event, context):
                 lb_name = lb['LoadBalancerName']
                 lb_type = lb.get('Type', 'application')
                 
-                print(f"\n🔍 Checking Load Balancer: {lb_name}")
-                print(f"  📊 Type: {lb_type.upper()}")
-                print(f"  📊 DNS: {lb.get('DNSName')}")
+                print(f"\n  Checking Load Balancer: {lb_name}")
+                print(f"    Type: {lb_type.upper()}")
+                print(f"    DNS: {lb.get('DNSName')}")
                 
                 # Check for protection tag
                 try:
@@ -1205,10 +1198,10 @@ def lambda_handler(event, context):
                         tags = {tag['Key']: tag['Value'] for tag in tags_response['TagDescriptions'][0].get('Tags', [])}
                     
                     if tags.get('CostGuardian') == 'Ignore':
-                        print(f"  ⏭️  Skipping (protected with CostGuardian=Ignore tag)")
+                        print(f"     Skipping (protected with CostGuardian=Ignore tag)")
                         continue
                 except Exception as e:
-                    print(f"  ⚠️  Could not fetch tags: {str(e)}")
+                    print(f"     Could not fetch tags: {str(e)}")
                     tags = {}
                 
                 try:
@@ -1230,7 +1223,7 @@ def lambda_handler(event, context):
                     
                     if not is_idle:
                         # Load balancer is active
-                        print(f"  ✅ Load Balancer is ACTIVE")
+                        print(f"    Load Balancer is ACTIVE")
                         lb_stats['active'] += 1
                         
                         table.put_item(Item={
@@ -1248,7 +1241,7 @@ def lambda_handler(event, context):
                     
                     elif idle_count < LB_IDLE_CHECKS:
                         # First, second, or third idle detection
-                        print(f"  ⚠️  Load Balancer IDLE (detection #{idle_count + 1}/{LB_IDLE_CHECKS})")
+                        print(f"     Load Balancer IDLE (detection #{idle_count + 1}/{LB_IDLE_CHECKS})")
                         lb_stats['idle'] += 1
                         
                         # Backup configuration
@@ -1277,7 +1270,7 @@ def lambda_handler(event, context):
                     
                     else:
                         # Idle for 3+ checks - delete
-                        print(f"  🗑️  Load Balancer idle for {idle_count + 1} checks - DELETING")
+                        print(f"    Load Balancer idle for {idle_count + 1} checks - DELETING")
                         lb_stats['idle'] += 1
                         
                         # Final backup
@@ -1311,13 +1304,13 @@ def lambda_handler(event, context):
                             lb_stats['errors'] += 1
                 
                 except Exception as e:
-                    print(f"  ❌ Error processing load balancer {lb_name}: {str(e)}")
+                    print(f"    Error processing load balancer {lb_name}: {str(e)}")
                     import traceback
-                    print(f"  🔍 Traceback: {traceback.format_exc()}")
+                    print(f"    Traceback: {traceback.format_exc()}")
                     lb_stats['errors'] += 1
-        # ============================================
+         
         # STEP 9: CHECK ORPHANED VPCS
-        # ============================================
+         
         if ENABLE_VPC_CLEANUP:
             print(f"\n" + "="*50)
             print(f"🌐 VPC CLEANUP MONITORING")
@@ -1344,20 +1337,20 @@ def lambda_handler(event, context):
                         vpc_name = tag['Value']
                         break
                 
-                print(f"\n🔍 Checking VPC: {vpc_name} ({vpc_id})")
-                print(f"  📊 CIDR: {vpc.get('CidrBlock')}")
-                print(f"  📊 Default: {vpc.get('IsDefault')}")
+                print(f"\n  Checking VPC: {vpc_name} ({vpc_id})")
+                print(f"    CIDR: {vpc.get('CidrBlock')}")
+                print(f"    Default: {vpc.get('IsDefault')}")
                 
                 # Skip default VPC
                 if vpc.get('IsDefault'):
-                    print(f"  ⏭️  Skipping (default VPC - protected)")
+                    print(f"     Skipping (default VPC - protected)")
                     vpc_stats['active'] += 1
                     continue
                 
                 # Check for protection tag
                 tags = {tag['Key']: tag['Value'] for tag in vpc.get('Tags', [])}
                 if tags.get('CostGuardian') == 'Ignore':
-                    print(f"  ⏭️  Skipping (protected with CostGuardian=Ignore tag)")
+                    print(f"     Skipping (protected with CostGuardian=Ignore tag)")
                     vpc_stats['active'] += 1
                     continue
                 
@@ -1378,7 +1371,7 @@ def lambda_handler(event, context):
                     
                     if not is_empty:
                         # VPC has resources
-                        print(f"  ✅ VPC is ACTIVE ({resource_count} resources)")
+                        print(f"    VPC is ACTIVE ({resource_count} resources)")
                         vpc_stats['active'] += 1
                         
                         table.put_item(Item={
@@ -1394,7 +1387,7 @@ def lambda_handler(event, context):
                     
                     elif empty_count < VPC_IDLE_CHECKS:
                         # First, second, or third empty detection
-                        print(f"  ⚠️  VPC is EMPTY (detection #{empty_count + 1}/{VPC_IDLE_CHECKS})")
+                        print(f"     VPC is EMPTY (detection #{empty_count + 1}/{VPC_IDLE_CHECKS})")
                         vpc_stats['empty'] += 1
                         
                         # Backup configuration
@@ -1420,7 +1413,7 @@ def lambda_handler(event, context):
                     
                     else:
                         # Empty for 3+ checks - delete
-                        print(f"  🗑️  VPC empty for {empty_count + 1} checks - DELETING")
+                        print(f"    VPC empty for {empty_count + 1} checks - DELETING")
                         vpc_stats['empty'] += 1
                         
                         # Final backup
@@ -1451,14 +1444,14 @@ def lambda_handler(event, context):
                             vpc_stats['errors'] += 1
                 
                 except Exception as e:
-                    print(f"  ❌ Error processing VPC {vpc_id}: {str(e)}")
+                    print(f"    Error processing VPC {vpc_id}: {str(e)}")
                     import traceback
-                    print(f"  🔍 Traceback: {traceback.format_exc()}")
+                    print(f"    Traceback: {traceback.format_exc()}")
                     vpc_stats['errors'] += 1
             
             # Print summary
             print(f"\n" + "="*50)
-            print(f"📊 VPC Cleanup Summary:")
+            print(f"  VPC Cleanup Summary:")
             print(f"  Total VPCs: {vpc_stats['total']}")
             print(f"  Active (with resources): {vpc_stats['active']}")
             print(f"  Empty: {vpc_stats['empty']}")
@@ -1470,7 +1463,7 @@ def lambda_handler(event, context):
             
         # Print summary
         print(f"\n" + "="*50)
-        print(f"📊 Load Balancer Summary:")
+        print(f"  Load Balancer Summary:")
         print(f"  Total Load Balancers: {lb_stats['total']}")
         print(f"  Active: {lb_stats['active']}")
         print(f"  Idle: {lb_stats['idle']}")
@@ -1478,12 +1471,12 @@ def lambda_handler(event, context):
         print(f"  Errors: {lb_stats['errors']}")
         if lb_stats['deleted'] > 0:
             savings = lb_stats['deleted'] * 16.20
-            print(f"  💰 Monthly Savings: ${savings:.2f}")
+            print(f"    Monthly Savings: ${savings:.2f}")
         print("="*50)
         
         # Print EBS summary
         print(f"\n" + "="*50)
-        print(f"📊 EBS Volume Summary:")
+        print(f"  EBS Volume Summary:")
         print(f"  Total Volumes: {ebs_stats['total']}")
         print(f"  In Use (attached): {ebs_stats['in_use']}")
         print(f"  Available (unattached): {ebs_stats['available']}")
@@ -1491,12 +1484,12 @@ def lambda_handler(event, context):
         print(f"  Deleted: {ebs_stats['deleted']}")
         print(f"  Errors: {ebs_stats['errors']}")
         if ebs_stats['deleted'] > 0:
-            print(f"  💰 Volume cleanup completed")
+            print(f"    Volume cleanup completed")
         print("="*50)
         
         # Print S3 summary
         print(f"\n" + "="*50)
-        print(f"📊 S3 Bucket Summary:")
+        print(f"  S3 Bucket Summary:")
         print(f"  Total Buckets: {s3_stats['total']}")
         print(f"  With Data: {s3_stats['has_data']}")
         print(f"  Empty: {s3_stats['empty']}")
@@ -1508,7 +1501,7 @@ def lambda_handler(event, context):
         
         # Print RDS summary
         print(f"\n" + "="*50)
-        print(f"📊 RDS Summary:")
+        print(f"  RDS Summary:")
         print(f"  Total RDS Instances: {rds_stats['total']}")
         print(f"  Active: {rds_stats['active']}")
         print(f"  Idle: {rds_stats['idle']}")
@@ -1518,12 +1511,12 @@ def lambda_handler(event, context):
         if rds_stats['deleted'] > 0 or rds_stats['stopped'] > 0:
             # Calculate approximate savings
             # Stopped = ~80% savings, Deleted = 100% savings
-            print(f"  💰 Estimated savings this run")
+            print(f"    Estimated savings this run")
         print("="*50)
         
         # Print Elastic IP summary
         print(f"\n" + "="*50)
-        print(f"📊 Elastic IP Summary:")
+        print(f"  Elastic IP Summary:")
         print(f"  Total Elastic IPs: {eip_stats['total']}")
         print(f"  Attached: {eip_stats['attached']}")
         print(f"  Unattached: {eip_stats['unattached']}")
@@ -1531,12 +1524,12 @@ def lambda_handler(event, context):
         print(f"  Errors: {eip_stats['errors']}")
         if eip_stats['released'] > 0:
             monthly_savings = eip_stats['released'] * 3.60
-            print(f"  💰 Monthly Savings: ${monthly_savings:.2f}")
+            print(f"    Monthly Savings: ${monthly_savings:.2f}")
         print("="*50)
         
         # Print NAT Gateway summary
         print(f"\n" + "="*50)
-        print(f"📊 NAT Gateway Summary:")
+        print(f"  NAT Gateway Summary:")
         print(f"  Total NAT Gateways: {nat_stats['total']}")
         print(f"  Active: {nat_stats['active']}")
         print(f"  Idle: {nat_stats['idle']}")
@@ -1544,7 +1537,7 @@ def lambda_handler(event, context):
         print(f"  Errors: {nat_stats['errors']}")
         if nat_stats['deleted'] > 0:
             monthly_savings = nat_stats['deleted'] * 32.40
-            print(f"  💰 Monthly Savings: ${monthly_savings:.2f}")
+            print(f"    Monthly Savings: ${monthly_savings:.2f}")
         print("="*50)
         
         '''log_metric('TotalInstances', stats['total_instances'])
@@ -1553,7 +1546,7 @@ def lambda_handler(event, context):
         log_metric('Errors', stats['errors'])'''
         
         print("\n" + "="*50)
-        print("📊 CostGuardian Summary:")
+        print("  CostGuardian Summary:")
         print(f"  Total instances: {stats['total_instances']}")
         print(f"  Active: {stats['active_instances']}")
         print(f"  Idle: {stats['idle_instances']}")
@@ -1561,11 +1554,11 @@ def lambda_handler(event, context):
         print(f"  Errors: {stats['errors']}")
         print("="*50)
 
-        # ============================================
+         
         # SEND METRICS TO CLOUDWATCH FOR DASHBOARD
-        # ============================================
+         
         print(f"\n" + "="*50)
-        print(f"📊 Sending metrics to CloudWatch...")
+        print(f"  Sending metrics to CloudWatch...")
         print("="*50)
         
         # Calculate total monthly savings
@@ -1631,11 +1624,11 @@ def lambda_handler(event, context):
         send_cloudwatch_metric('ResourcesDeleted', total_deleted)
         send_cloudwatch_metric('ResourcesWarned', total_warned)
         
-        print(f"✅ Metrics sent successfully")
-        print(f"  💰 Total Monthly Savings: ${total_monthly_savings:.2f}")
-        print(f"  📊 Total Annual Savings: ${total_monthly_savings * 12:.2f}")
-        print(f"  🗑️  Resources Deleted This Run: {total_deleted}")
-        print(f"  ⚠️  Resources Warned This Run: {total_warned}")
+        print(f"  Metrics sent successfully")
+        print(f"    Total Monthly Savings: ${total_monthly_savings:.2f}")
+        print(f"    Total Annual Savings: ${total_monthly_savings * 12:.2f}")
+        print(f"    Resources Deleted This Run: {total_deleted}")
+        print(f"     Resources Warned This Run: {total_warned}")
         
         return {
             'statusCode': 200,
@@ -1647,7 +1640,7 @@ def lambda_handler(event, context):
         
     
     except Exception as e:
-        print(f"❌ Fatal error: {str(e)}")
+        print(f"  Fatal error: {str(e)}")
         return {
             'statusCode': 500,
             'body': json.dumps(f'Error: {str(e)}')
@@ -1683,7 +1676,7 @@ def get_cpu_utilization(instance_id):
         
         # If no data, assume 0% (might be just launched)
         if not datapoints:
-            print(f"  ⚠️  No CloudWatch data for {instance_id} (newly launched?)")
+            print(f"     No CloudWatch data for {instance_id} (newly launched?)")
             return 0.0
         
         # Calculate overall average
@@ -1693,14 +1686,14 @@ def get_cpu_utilization(instance_id):
         return average_cpu
     
     except Exception as e:
-        print(f"  ❌ Error getting metrics: {str(e)}")
+        print(f"    Error getting metrics: {str(e)}")
         return 100.0  # Assume active if can't read metrics
 
 
 
-# ============================================
+ 
 # HELPER FUNCTION: BACKUP CONFIGURATION (ENHANCED)
-# ============================================
+ 
 def backup_instance_config(instance, instance_id):
     """
     Saves complete EC2 instance configuration to S3
@@ -1708,11 +1701,11 @@ def backup_instance_config(instance, instance_id):
     """
     
     try:
-        print(f"  💾 Backing up configuration for {instance_id}...")
+        print(f"    Backing up configuration for {instance_id}...")
         
-        # ============================================
+         
         # STEP 1: BASIC INSTANCE CONFIGURATION
-        # ============================================
+         
         config = {
             'InstanceId': instance_id,
             'InstanceType': instance.get('InstanceType'),
@@ -1730,9 +1723,9 @@ def backup_instance_config(instance, instance_id):
             'BackupTimestamp': datetime.now().isoformat()
         }
         
-        # ============================================
+         
         # STEP 2: DETAILED SECURITY GROUP RULES
-        # ============================================
+         
         security_groups_detailed = []
         
         for sg in instance.get('SecurityGroups', []):
@@ -1819,10 +1812,10 @@ def backup_instance_config(instance, instance_id):
                         'Tags': sg_details.get('Tags', [])
                     })
                     
-                    print(f"    ✅ Captured security group: {sg_details['GroupName']}")
+                    print(f"      Captured security group: {sg_details['GroupName']}")
             
             except Exception as e:
-                print(f"    ⚠️  Could not fetch details for SG {sg_id}: {str(e)}")
+                print(f"       Could not fetch details for SG {sg_id}: {str(e)}")
                 # Add basic info even if detailed fetch fails
                 security_groups_detailed.append({
                     'GroupId': sg_id,
@@ -1832,9 +1825,9 @@ def backup_instance_config(instance, instance_id):
         
         config['SecurityGroupsDetailed'] = security_groups_detailed
         
-        # ============================================
+         
         # STEP 3: VPC DETAILS
-        # ============================================
+         
         vpc_id = instance.get('VpcId')
         if vpc_id:
             try:
@@ -1867,15 +1860,15 @@ def backup_instance_config(instance, instance_id):
                         for igw in igw_response.get('InternetGateways', [])
                     ]
                     
-                    print(f"    ✅ Captured VPC details: {vpc_id}")
+                    print(f"      Captured VPC details: {vpc_id}")
             
             except Exception as e:
-                print(f"    ⚠️  Could not fetch VPC details: {str(e)}")
+                print(f"       Could not fetch VPC details: {str(e)}")
                 config['VpcDetails'] = {'VpcId': vpc_id, 'Error': str(e)}
         
-        # ============================================
+         
         # STEP 4: SUBNET DETAILS
-        # ============================================
+         
         subnet_id = instance.get('SubnetId')
         if subnet_id:
             try:
@@ -1916,15 +1909,15 @@ def backup_instance_config(instance, instance_id):
                             ]
                         }
                     
-                    print(f"    ✅ Captured subnet details: {subnet_id}")
+                    print(f"      Captured subnet details: {subnet_id}")
             
             except Exception as e:
                 print(f"Could not fetch subnet details: {str(e)}")
                 config['SubnetDetails'] = {'SubnetId': subnet_id, 'Error': str(e)}
         
-        # ============================================
+         
         # STEP 5: NETWORK INTERFACES (ENI)
-        # ============================================
+         
         config['NetworkInterfaces'] = []
         
         for ni in instance.get('NetworkInterfaces', []):
@@ -1939,9 +1932,9 @@ def backup_instance_config(instance, instance_id):
                 'Groups': ni.get('Groups', [])
             })
         
-        # ============================================
+         
         # STEP 6: SAVE TO S3
-        # ============================================
+         
         # Convert to JSON string with proper formatting
         config_json = json.dumps(config, indent=2, default=str)
         
@@ -1955,15 +1948,15 @@ def backup_instance_config(instance, instance_id):
             ContentType='application/json'
         )
         
-        print(f"  ✅ Enhanced backup saved to s3://{S3_BUCKET}/{s3_key}")
-        print(f"  📊 Backup includes: Instance + Security Groups + VPC + Subnet + Routes")
+        print(f"    Enhanced backup saved to s3://{S3_BUCKET}/{s3_key}")
+        print(f"    Backup includes: Instance + Security Groups + VPC + Subnet + Routes")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Backup failed: {str(e)}")
+        print(f"    Backup failed: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
@@ -1981,7 +1974,7 @@ def send_idle_alert(instance, instance_id, cpu_usage):
                 break
         
         # Compose email message
-        subject = f"⚠️ CostGuardian Alert - Idle EC2 Detected: {instance_name}"
+        subject = f"  CostGuardian Alert - Idle EC2 Detected: {instance_name}"
         
         message = f"""
                     CostGuardian has detected an idle EC2 instance:
@@ -1994,8 +1987,8 @@ def send_idle_alert(instance, instance_id, cpu_usage):
                     - Average CPU (24h): {cpu_usage:.2f}%
 
                     Action Taken:
-                    ✅ Configuration backed up to S3
-                    ✅ Logged in DynamoDB
+                      Configuration backed up to S3
+                      Logged in DynamoDB
 
                     Next Steps:
                     - If you don't need this instance, consider stopping it
@@ -2013,10 +2006,10 @@ def send_idle_alert(instance, instance_id, cpu_usage):
             Message=message
         )
         
-        print(f"  📧 Email alert sent!")
+        print(f"    Email alert sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send alert: {str(e)}")
+        print(f"    Failed to send alert: {str(e)}")
         
 '''
 def log_metric(metric_name, value, unit='Count'):
@@ -2083,7 +2076,7 @@ def get_instance_cost(instance_type, region='us-east-1'):
         return estimated_cost
     else:
         # Unknown type - estimate based on naming convention
-        print(f"  ⚠️  Unknown instance type: {instance_type}")
+        print(f"     Unknown instance type: {instance_type}")
         if 'nano' in instance_type:
             return 5
         elif 'micro' in instance_type:
@@ -2099,9 +2092,9 @@ def get_instance_cost(instance_type, region='us-east-1'):
         else:
             return 200  # Conservative estimate for large instances
 
-# ============================================
+ 
 # HELPER FUNCTION: GET RESOURCE HISTORY
-# ============================================
+ 
 def get_resource_history(table, resource_id, days=30):
     """
     Retrieves the history of a resource from DynamoDB
@@ -2126,13 +2119,13 @@ def get_resource_history(table, resource_id, days=30):
         return items
     
     except Exception as e:
-        print(f"  ❌ Error getting history: {str(e)}")
+        print(f"    Error getting history: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DETERMINE ACTION (CONFIGURABLE)
-# ============================================
+ 
 def determine_action(history, current_cpu):
     """
     Analyzes resource history and determines what action to take
@@ -2194,11 +2187,11 @@ def determine_action(history, current_cpu):
     
     elif idle_count >= IDLE_CHECKS_BEFORE_ACTION:
         # Idle for required number of checks
-        print(f"  🛑 Idle threshold reached: {idle_count} consecutive checks")
+        print(f"    Idle threshold reached: {idle_count} consecutive checks")
         
         if SKIP_QUARANTINE:
             # Skip stopping, go straight to deletion
-            print(f"  ⚡ SKIP_QUARANTINE=True: Will delete immediately without stopping")
+            print(f"  SKIP_QUARANTINE=True: Will delete immediately without stopping")
             return 'DELETE', idle_count, None
         else:
             # Normal flow: stop first (quarantine)
@@ -2212,9 +2205,9 @@ def determine_action(history, current_cpu):
         # First time seeing this resource or no idle history
         return 'WARN', 0, None
 
-# ============================================
+ 
 # HELPER FUNCTION: STOP EC2 INSTANCE
-# ============================================
+ 
 def stop_instance(instance_id, instance):
     """
     Stops an EC2 instance (does not terminate)
@@ -2223,7 +2216,7 @@ def stop_instance(instance_id, instance):
     Returns: AMI ID if successful, None if failed
     """
     try:
-        print(f"  🛑 Initiating STOP sequence for {instance_id}...")
+        print(f"    Initiating STOP sequence for {instance_id}...")
         
         # Get instance name from tags
         instance_name = "Unnamed"
@@ -2236,7 +2229,7 @@ def stop_instance(instance_id, instance):
         ami_name = f"CostGuardian-Backup-{instance_id}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         ami_description = f"CostGuardian automatic backup of {instance_name} before stopping"
         
-        print(f"  📸 Creating AMI backup: {ami_name}")
+        print(f"    Creating AMI backup: {ami_name}")
         
         ami_response = ec2_client.create_image(
             InstanceId=instance_id,
@@ -2257,30 +2250,30 @@ def stop_instance(instance_id, instance):
         )
         
         ami_id = ami_response['ImageId']
-        print(f"  ✅ AMI created successfully: {ami_id}")
+        print(f"    AMI created successfully: {ami_id}")
         
         # Step 2: Stop the instance
-        print(f"  🛑 Stopping instance {instance_id}...")
+        print(f"    Stopping instance {instance_id}...")
         
         ec2_client.stop_instances(
             InstanceIds=[instance_id]
         )
         
-        print(f"  ✅ Instance {instance_id} stopped successfully")
-        print(f"  💰 Cost reduced from ~${get_instance_cost(instance.get('InstanceType'))}/month to ~$1-2/month")
+        print(f"    Instance {instance_id} stopped successfully")
+        print(f"    Cost reduced from ~${get_instance_cost(instance.get('InstanceType'))}/month to ~$1-2/month")
         
         return ami_id
     
     except Exception as e:
-        print(f"  ❌ Error stopping instance: {str(e)}")
+        print(f"    Error stopping instance: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return None
 
 
-# ============================================
+ 
 # HELPER FUNCTION: TERMINATE EC2 INSTANCE
-# ============================================
+ 
 def terminate_instance(instance_id):
     """
     Terminates (permanently deletes) an EC2 instance
@@ -2292,7 +2285,7 @@ def terminate_instance(instance_id):
     Returns: True if successful, False if failed
     """
     try:
-        print(f"  🗑️  Initiating TERMINATE sequence for {instance_id}...")
+        print(f"    Initiating TERMINATE sequence for {instance_id}...")
         
         # Terminate the instance
         response = ec2_client.terminate_instances(
@@ -2302,23 +2295,23 @@ def terminate_instance(instance_id):
         # Check response
         current_state = response['TerminatingInstances'][0]['CurrentState']['Name']
         
-        print(f"  ✅ Instance {instance_id} termination initiated")
-        print(f"  📊 Current state: {current_state}")
-        print(f"  ⚠️  This action is PERMANENT - instance cannot be restarted")
-        print(f"  ✅ All backups preserved in S3 and AMI")
+        print(f"    Instance {instance_id} termination initiated")
+        print(f"    Current state: {current_state}")
+        print(f"     This action is PERMANENT - instance cannot be restarted")
+        print(f"    All backups preserved in S3 and AMI")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Error terminating instance: {str(e)}")
+        print(f"    Error terminating instance: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND QUARANTINE ALERT
-# ============================================
+ 
 def send_quarantine_alert(instance, instance_id, ami_id, idle_count):
     """
     Sends email notification when instance is stopped (quarantined)
@@ -2330,7 +2323,7 @@ def send_quarantine_alert(instance, instance_id, ami_id, idle_count):
                 instance_name = tag['Value']
                 break
         
-        subject = f"🛑 CostGuardian Alert - Instance STOPPED: {instance_name}"
+        subject = f"  CostGuardian Alert - Instance STOPPED: {instance_name}"
         
         estimated_cost = get_instance_cost(instance.get('InstanceType'))
         grace_end_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M UTC')
@@ -2346,16 +2339,16 @@ Instance Name:    {instance_name}
 Instance Type:    {instance.get('InstanceType')}
 Region:           {ec2_client.meta.region_name}
 
-Status:           STOPPED ⏸️
+Status:           STOPPED  
 Idle Duration:    {idle_count} consecutive checks (~{idle_count} hours)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTIONS TAKEN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Instance STOPPED (not terminated)
-✅ AMI backup created: {ami_id}
-✅ Configuration saved to S3
-✅ DynamoDB history updated
+  Instance STOPPED (not terminated)
+  AMI backup created: {ami_id}
+  Configuration saved to S3
+  DynamoDB history updated
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST IMPACT
@@ -2405,15 +2398,15 @@ To disable monitoring for this instance, add tag: CostGuardian=Ignore
             Message=message
         )
         
-        print(f"  📧 Quarantine alert email sent!")
+        print(f"    Quarantine alert email sent!")
         
     except Exception as e:
-        print(f"  ❌ Failed to send quarantine alert: {str(e)}")
+        print(f"    Failed to send quarantine alert: {str(e)}")
 
 
-# ======================================
+ 
 # HELPER FUNCTION: SEND DELETION ALERT
-# ======================================
+ 
 def send_deletion_alert(instance, instance_id, deleted_sgs=None):
     """
     Sends email notification when instance is terminated
@@ -2436,7 +2429,7 @@ def send_deletion_alert(instance, instance_id, deleted_sgs=None):
         if deleted_sgs and len(deleted_sgs) > 0:
             sg_section = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nSECURITY GROUPS CLEANED UP\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             for sg in deleted_sgs:
-                sg_section += f"✅ Deleted: {sg['GroupName']} ({sg['GroupId']})\n"
+                sg_section += f"  Deleted: {sg['GroupName']} ({sg['GroupId']})\n"
             sg_section += "\nOrphaned security groups have been removed.\n"
         else:
             sg_section = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nSECURITY GROUPS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nNo orphaned security groups to clean up.\n(Either shared with other instances or default SG)\n"
@@ -2450,13 +2443,13 @@ INSTANCE DETAILS
 Instance ID:      {instance_id}
 Instance Name:    {instance_name}
 Instance Type:    {instance.get('InstanceType')}
-Status:           TERMINATED 🗑️ (PERMANENT)
+Status:           TERMINATED  (PERMANENT)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST SAVINGS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 Monthly Savings:  ${estimated_savings:.2f}
-💰 Annual Savings:   ${annual_savings:.2f}
+  Monthly Savings:  ${estimated_savings:.2f}
+  Annual Savings:   ${annual_savings:.2f}
 
 This instance was idle for 7+ days and has been permanently deleted.
 {sg_section}
@@ -2504,8 +2497,8 @@ Option 3: Infrastructure as Code
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️  Note: This instance is permanently deleted and cannot be restarted.
-✅ All backups remain available for recreation if needed.
+   Note: This instance is permanently deleted and cannot be restarted.
+  All backups remain available for recreation if needed.
 
 -- CostGuardian Cost Optimization System
 """
@@ -2516,14 +2509,14 @@ Option 3: Infrastructure as Code
             Message=message
         )
         
-        print(f"  📧 Deletion alert email sent (including SG cleanup info)!")
+        print(f"    Deletion alert email sent (including SG cleanup info)!")
         
     except Exception as e:
-        print(f"  ❌ Failed to send deletion alert: {str(e)}")
+        print(f"    Failed to send deletion alert: {str(e)}")
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE SECURITY GROUPS
-# ============================================
+ 
 def delete_security_groups(instance):
     """
     Deletes security groups associated with a terminated instance
@@ -2549,7 +2542,7 @@ def delete_security_groups(instance):
             
             # Skip default security group (can't be deleted)
             if sg_name == 'default':
-                print(f"  ⏭️  Skipping default security group: {sg_id}")
+                print(f"     Skipping default security group: {sg_id}")
                 continue
             
             try:
@@ -2583,7 +2576,7 @@ def delete_security_groups(instance):
                 )
                 
                 if instance_count > 0:
-                    print(f"  ⏭️  Security group {sg_name} ({sg_id}) still in use by {instance_count} instance(s)")
+                    print(f"     Security group {sg_name} ({sg_id}) still in use by {instance_count} instance(s)")
                     continue
                 
                 # Check if any network interfaces are using this SG
@@ -2597,11 +2590,11 @@ def delete_security_groups(instance):
                 )
                 
                 if ni_response['NetworkInterfaces']:
-                    print(f"  ⏭️  Security group {sg_name} ({sg_id}) attached to {len(ni_response['NetworkInterfaces'])} network interface(s)")
+                    print(f"     Security group {sg_name} ({sg_id}) attached to {len(ni_response['NetworkInterfaces'])} network interface(s)")
                     continue
                 
                 # Safe to delete - no dependencies
-                print(f"  🗑️  Deleting security group: {sg_name} ({sg_id})")
+                print(f"    Deleting security group: {sg_name} ({sg_id})")
                 
                 ec2_client.delete_security_group(GroupId=sg_id)
                 
@@ -2610,32 +2603,32 @@ def delete_security_groups(instance):
                     'GroupName': sg_name
                 })
                 
-                print(f"  ✅ Security group {sg_name} deleted successfully")
+                print(f"    Security group {sg_name} deleted successfully")
             
             except ec2_client.exceptions.ClientError as e:
                 error_code = e.response['Error']['Code']
                 
                 if error_code == 'DependencyViolation':
-                    print(f"  ⚠️  Cannot delete {sg_name} ({sg_id}): Still has dependencies")
+                    print(f"     Cannot delete {sg_name} ({sg_id}): Still has dependencies")
                 elif error_code == 'InvalidGroup.NotFound':
                     print(f"  ℹ️  Security group {sg_id} already deleted")
                 else:
-                    print(f"  ❌ Error deleting {sg_name} ({sg_id}): {str(e)}")
+                    print(f"    Error deleting {sg_name} ({sg_id}): {str(e)}")
             
             except Exception as e:
-                print(f"  ❌ Unexpected error with {sg_id}: {str(e)}")
+                print(f"    Unexpected error with {sg_id}: {str(e)}")
         
         return deleted_sgs
     
     except Exception as e:
-        print(f"  ❌ Error in security group cleanup: {str(e)}")
+        print(f"    Error in security group cleanup: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return deleted_sgs
 
-# ============================================
+ 
 # HELPER FUNCTION: GET ALL NAT GATEWAYS
-# ============================================
+ 
 def get_all_nat_gateways():
     """
     Retrieves all NAT Gateways in the account/region
@@ -2656,18 +2649,18 @@ def get_all_nat_gateways():
         
         nat_gateways = response.get('NatGateways', [])
         
-        print(f"📊 Found {len(nat_gateways)} NAT Gateway(s)")
+        print(f"  Found {len(nat_gateways)} NAT Gateway(s)")
         
         return nat_gateways
     
     except Exception as e:
-        print(f"❌ Error getting NAT Gateways: {str(e)}")
+        print(f"  Error getting NAT Gateways: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CHECK NAT GATEWAY USAGE
-# ============================================
+ 
 def check_nat_gateway_usage(nat_gateway_id):
     """
     Checks CloudWatch metrics to determine if NAT Gateway is being used
@@ -2679,7 +2672,7 @@ def check_nat_gateway_usage(nat_gateway_id):
     Returns: (bytes_out, bytes_in, is_idle)
     """
     try:
-        print(f"  📊 Checking usage metrics for {nat_gateway_id}...")
+        print(f"    Checking usage metrics for {nat_gateway_id}...")
         
         # Check last 7 days of usage
         end_time = datetime.now()
@@ -2736,21 +2729,21 @@ def check_nat_gateway_usage(nat_gateway_id):
         is_idle = total_mb < 1.0  # Less than 1 MB in a week = idle
         
         if is_idle:
-            print(f"  ⚠️  NAT Gateway appears IDLE (< 1 MB traffic in 7 days)")
+            print(f"     NAT Gateway appears IDLE (< 1 MB traffic in 7 days)")
         else:
-            print(f"  ✅ NAT Gateway is ACTIVE ({total_mb:.2f} MB transferred)")
+            print(f"    NAT Gateway is ACTIVE ({total_mb:.2f} MB transferred)")
         
         return total_bytes_out, total_bytes_in, is_idle
     
     except Exception as e:
-        print(f"  ❌ Error checking metrics: {str(e)}")
+        print(f"    Error checking metrics: {str(e)}")
         # If can't get metrics, assume active (safer)
         return 0, 0, False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: BACKUP NAT GATEWAY CONFIG
-# ============================================
+ 
 def backup_nat_gateway_config(nat_gateway):
     """
     Backs up complete NAT Gateway configuration to S3
@@ -2759,7 +2752,7 @@ def backup_nat_gateway_config(nat_gateway):
     try:
         nat_gateway_id = nat_gateway['NatGatewayId']
         
-        print(f"  💾 Backing up NAT Gateway configuration...")
+        print(f"    Backing up NAT Gateway configuration...")
         
         # Basic NAT Gateway details
         config = {
@@ -2797,7 +2790,7 @@ def backup_nat_gateway_config(nat_gateway):
                     'Tags': subnet.get('Tags', [])
                 }
         except Exception as e:
-            print(f"  ⚠️  Could not fetch subnet details: {str(e)}")
+            print(f"     Could not fetch subnet details: {str(e)}")
         
         # Get VPC details
         vpc_id = nat_gateway['VpcId']
@@ -2811,7 +2804,7 @@ def backup_nat_gateway_config(nat_gateway):
                     'Tags': vpc.get('Tags', [])
                 }
         except Exception as e:
-            print(f"  ⚠️  Could not fetch VPC details: {str(e)}")
+            print(f"     Could not fetch VPC details: {str(e)}")
         
         # Get Route Tables that reference this NAT Gateway
         try:
@@ -2847,10 +2840,10 @@ def backup_nat_gateway_config(nat_gateway):
                     ]
                 })
             
-            print(f"  ✅ Found {len(config['RouteTables'])} route table(s) using this NAT Gateway")
+            print(f"    Found {len(config['RouteTables'])} route table(s) using this NAT Gateway")
         
         except Exception as e:
-            print(f"  ⚠️  Could not fetch route tables: {str(e)}")
+            print(f"     Could not fetch route tables: {str(e)}")
             config['RouteTables'] = []
         
         # Calculate monthly cost
@@ -2868,21 +2861,21 @@ def backup_nat_gateway_config(nat_gateway):
             ContentType='application/json'
         )
         
-        print(f"  ✅ NAT Gateway configuration backed up to S3")
+        print(f"    NAT Gateway configuration backed up to S3")
         print(f"  📁 s3://{S3_BUCKET}/{s3_key}")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Backup failed: {str(e)}")
+        print(f"    Backup failed: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE NAT GATEWAY
-# ============================================
+ 
 def delete_nat_gateway(nat_gateway_id, release_eip=True):
     """
     Deletes a NAT Gateway and optionally releases the Elastic IP
@@ -2896,7 +2889,7 @@ def delete_nat_gateway(nat_gateway_id, release_eip=True):
     Returns: (success, elastic_ip_released)
     """
     try:
-        print(f"  🗑️  Initiating NAT Gateway deletion: {nat_gateway_id}")
+        print(f"    Initiating NAT Gateway deletion: {nat_gateway_id}")
         
         # Step 1: Get Elastic IP allocation ID before deletion
         nat_gw_response = ec2_client.describe_nat_gateways(
@@ -2938,61 +2931,61 @@ def delete_nat_gateway(nat_gateway_id, release_eip=True):
                                     RouteTableId=rt_id,
                                     DestinationCidrBlock=dest_cidr
                                 )
-                                print(f"      ✅ Removed route: {dest_cidr} → {nat_gateway_id}")
+                                print(f"        Removed route: {dest_cidr} → {nat_gateway_id}")
                             except Exception as e:
-                                print(f"      ⚠️  Could not remove route {dest_cidr}: {str(e)}")
+                                print(f"         Could not remove route {dest_cidr}: {str(e)}")
         
         except Exception as e:
-            print(f"  ⚠️  Error updating route tables: {str(e)}")
+            print(f"     Error updating route tables: {str(e)}")
             print(f"  ℹ️  Continuing with NAT Gateway deletion anyway...")
         
         # Step 3: Delete NAT Gateway
-        print(f"  🗑️  Deleting NAT Gateway...")
+        print(f"    Deleting NAT Gateway...")
         
         ec2_client.delete_nat_gateway(
             NatGatewayId=nat_gateway_id
         )
         
-        print(f"  ✅ NAT Gateway deletion initiated")
-        print(f"  ⏳ NAT Gateway will be deleted in background (takes 2-5 minutes)")
+        print(f"    NAT Gateway deletion initiated")
+        print(f"    NAT Gateway will be deleted in background (takes 2-5 minutes)")
         
         # Step 4: Release Elastic IP (optional)
         eip_released = False
         if release_eip and allocation_id:
-            print(f"  ⏳ Waiting 30 seconds for NAT Gateway to detach from Elastic IP...")
+            print(f"    Waiting 30 seconds for NAT Gateway to detach from Elastic IP...")
             import time
             time.sleep(30)  # Wait for NAT Gateway to release EIP
             
             try:
-                print(f"  🗑️  Releasing Elastic IP: {allocation_id}")
+                print(f"    Releasing Elastic IP: {allocation_id}")
                 
                 ec2_client.release_address(
                     AllocationId=allocation_id
                 )
                 
-                print(f"  ✅ Elastic IP released successfully")
+                print(f"    Elastic IP released successfully")
                 eip_released = True
             
             except Exception as e:
-                print(f"  ⚠️  Could not release Elastic IP: {str(e)}")
+                print(f"     Could not release Elastic IP: {str(e)}")
                 print(f"  ℹ️  You may need to release it manually to avoid $3.60/month charge")
                 eip_released = False
         
-        print(f"  💰 Savings: $32.40/month + ${3.60 if not eip_released else 0}/month EIP")
-        print(f"  💰 Annual savings: ${(32.40 + (3.60 if not eip_released else 0)) * 12:.2f}")
+        print(f"    Savings: $32.40/month + ${3.60 if not eip_released else 0}/month EIP")
+        print(f"    Annual savings: ${(32.40 + (3.60 if not eip_released else 0)) * 12:.2f}")
         
         return True, eip_released
     
     except Exception as e:
-        print(f"  ❌ Error deleting NAT Gateway: {str(e)}")
+        print(f"    Error deleting NAT Gateway: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False, False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND NAT GATEWAY ALERT
-# ============================================
+ 
 def send_nat_gateway_alert(nat_gateway, action, bytes_out, bytes_in):
     """
     Sends email notification about NAT Gateway actions
@@ -3022,7 +3015,7 @@ def send_nat_gateway_alert(nat_gateway, action, bytes_out, bytes_in):
         total_mb = mb_out + mb_in
         
         if action == 'IDLE_WARNING':
-            subject = f"⚠️ CostGuardian Alert - Idle NAT Gateway Detected: {nat_name}"
+            subject = f"  CostGuardian Alert - Idle NAT Gateway Detected: {nat_name}"
             
             message = f"""
 CostGuardian has detected an IDLE NAT Gateway:
@@ -3044,7 +3037,7 @@ Data Out:         {mb_out:.2f} MB
 Data In:          {mb_in:.2f} MB
 Total Transfer:   {total_mb:.2f} MB
 
-⚠️  This NAT Gateway has transferred < 1 MB in the past 7 days!
+   This NAT Gateway has transferred < 1 MB in the past 7 days!
 This typically means it's unused or forgotten.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3053,14 +3046,14 @@ COST IMPACT
 Current Monthly Cost:  $32.40 (+ data transfer fees)
 Annual Cost:           $388.80/year
 
-💰 If deleted, you'll save $32.40/month immediately!
+  If deleted, you'll save $32.40/month immediately!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTIONS TAKEN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Configuration backed up to S3
-✅ Route table details saved
-✅ Elastic IP information preserved
+  Configuration backed up to S3
+  Route table details saved
+  Elastic IP information preserved
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NEXT STEPS
@@ -3095,7 +3088,7 @@ NAT Gateway ID:   {nat_gateway_id}
 Name:             {nat_name}
 VPC:              {vpc_id}
 Previous IP:      {public_ip}
-Status:           DELETED 🗑️
+Status:           DELETED 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 USAGE BEFORE DELETION
@@ -3107,18 +3100,18 @@ Idle duration:    3+ consecutive checks
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST SAVINGS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 Monthly Savings:   $32.40
-💰 Annual Savings:    $388.80
+  Monthly Savings:   $32.40
+  Annual Savings:    $388.80
 
 This NAT Gateway was costing $32.40/month even while idle!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTIONS COMPLETED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ NAT Gateway deleted
-✅ Route tables updated
-✅ Elastic IP released (saves additional $3.60/month)
-✅ Configuration preserved in S3
+  NAT Gateway deleted
+  Route tables updated
+  Elastic IP released (saves additional $3.60/month)
+  Configuration preserved in S3
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR BACKUPS (PRESERVED)
@@ -3148,7 +3141,7 @@ If you need this NAT Gateway again:
 
 Or use AWS CLI with saved configuration.
 
-⚠️  Note: You'll get a new Elastic IP (old one was released)
+   Note: You'll get a new Elastic IP (old one was released)
 
 -- CostGuardian Cost Optimization System
 """
@@ -3162,38 +3155,38 @@ Or use AWS CLI with saved configuration.
             Message=message
         )
         
-        print(f"  📧 NAT Gateway alert email sent!")
+        print(f"    NAT Gateway alert email sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send NAT Gateway alert: {str(e)}")
+        print(f"    Failed to send NAT Gateway alert: {str(e)}")
         
-# ============================================
+ 
 # HELPER FUNCTION: GET ALL ELASTIC IPS
-# ============================================
+ 
 def get_all_elastic_ips():
     """
     Retrieves all Elastic IPs in the account/region
     Returns list of Elastic IP details
     """
     try:
-        print(f"\n💰 Scanning for Elastic IPs...")
+        print(f"\n  Scanning for Elastic IPs...")
         
         response = ec2_client.describe_addresses()
         
         addresses = response.get('Addresses', [])
         
-        print(f"📊 Found {len(addresses)} Elastic IP(s)")
+        print(f"  Found {len(addresses)} Elastic IP(s)")
         
         return addresses
     
     except Exception as e:
-        print(f"❌ Error getting Elastic IPs: {str(e)}")
+        print(f"  Error getting Elastic IPs: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CHECK ELASTIC IP STATUS
-# ============================================
+ 
 def is_elastic_ip_unattached(eip):
     """
     Checks if Elastic IP is unattached (not associated with any resource)
@@ -3218,9 +3211,9 @@ def is_elastic_ip_unattached(eip):
         }
 
 
-# ============================================
+ 
 # HELPER FUNCTION: RELEASE ELASTIC IP
-# ============================================
+ 
 def release_elastic_ip(allocation_id, public_ip):
     """
     Releases (deletes) an unattached Elastic IP
@@ -3228,14 +3221,14 @@ def release_elastic_ip(allocation_id, public_ip):
     Returns: True if successful, False otherwise
     """
     try:
-        print(f"  🗑️  Releasing Elastic IP: {public_ip} ({allocation_id})")
+        print(f"    Releasing Elastic IP: {public_ip} ({allocation_id})")
         
         ec2_client.release_address(
             AllocationId=allocation_id
         )
         
-        print(f"  ✅ Elastic IP {public_ip} released successfully")
-        print(f"  💰 Savings: $3.60/month = $43.20/year")
+        print(f"    Elastic IP {public_ip} released successfully")
+        print(f"    Savings: $3.60/month = $43.20/year")
         
         return True
     
@@ -3246,17 +3239,17 @@ def release_elastic_ip(allocation_id, public_ip):
             print(f"  ℹ️  Elastic IP {allocation_id} already released")
             return True
         else:
-            print(f"  ❌ Error releasing Elastic IP: {str(e)}")
+            print(f"    Error releasing Elastic IP: {str(e)}")
             return False
     
     except Exception as e:
-        print(f"  ❌ Unexpected error: {str(e)}")
+        print(f"    Unexpected error: {str(e)}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND ELASTIC IP ALERT
-# ============================================
+ 
 def send_elastic_ip_alert(eip, action):
     """
     Sends email notification about Elastic IP actions
@@ -3272,7 +3265,7 @@ def send_elastic_ip_alert(eip, action):
         eip_name = tags.get('Name', 'Unnamed')
         
         if action == 'IDLE_WARNING':
-            subject = f"⚠️ CostGuardian Alert - Unattached Elastic IP: {public_ip}"
+            subject = f"  CostGuardian Alert - Unattached Elastic IP: {public_ip}"
             
             message = f"""
 CostGuardian has detected an UNATTACHED Elastic IP:
@@ -3284,7 +3277,7 @@ Public IP:        {public_ip}
 Allocation ID:    {allocation_id}
 Name:             {eip_name}
 Domain:           {domain}
-Status:           UNATTACHED ⚠️
+Status:           UNATTACHED  
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST IMPACT
@@ -3292,7 +3285,7 @@ COST IMPACT
 Current Monthly Cost:  $3.60 (unattached IP charge)
 Annual Cost:           $43.20/year
 
-💰 AWS charges $3.60/month for unattached Elastic IPs!
+  AWS charges $3.60/month for unattached Elastic IPs!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NEXT STEPS
@@ -3307,7 +3300,7 @@ To prevent release:
 1. Attach it to a running instance, OR
 2. Add tag: CostGuardian=Ignore
 
-⚠️  Note: Once released, you cannot recover this specific IP address!
+   Note: Once released, you cannot recover this specific IP address!
 
 -- CostGuardian Cost Optimization System
 """
@@ -3324,22 +3317,22 @@ ELASTIC IP DETAILS
 Public IP:        {public_ip}
 Allocation ID:    {allocation_id}
 Name:             {eip_name}
-Status:           RELEASED 🗑️
+Status:           RELEASED 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST SAVINGS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 Monthly Savings:   $3.60
-💰 Annual Savings:    $43.20
+  Monthly Savings:   $3.60
+  Annual Savings:    $43.20
 
 This Elastic IP was unattached and costing $3.60/month.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IMPORTANT NOTES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️  This IP address ({public_ip}) is now released
-⚠️  You CANNOT get this specific IP back
-⚠️  If you need an Elastic IP again, you'll get a different address
+   This IP address ({public_ip}) is now released
+   You CANNOT get this specific IP back
+   If you need an Elastic IP again, you'll get a different address
 
 If you had this IP whitelisted somewhere:
 → Update firewall rules with new IP when you allocate one
@@ -3362,14 +3355,14 @@ To allocate a new Elastic IP:
             Message=message
         )
         
-        print(f"  📧 Elastic IP alert email sent!")
+        print(f"    Elastic IP alert email sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send Elastic IP alert: {str(e)}")
+        print(f"    Failed to send Elastic IP alert: {str(e)}")
     
-# ============================================
+ 
 # HELPER FUNCTION: GET ALL RDS INSTANCES
-# ============================================
+ 
 def get_all_rds_instances():
     """
     Retrieves all RDS database instances in the account/region
@@ -3386,18 +3379,18 @@ def get_all_rds_instances():
         
         db_instances = response.get('DBInstances', [])
         
-        print(f"📊 Found {len(db_instances)} RDS instance(s)")
+        print(f"  Found {len(db_instances)} RDS instance(s)")
         
         return db_instances, rds_client
     
     except Exception as e:
-        print(f"❌ Error getting RDS instances: {str(e)}")
+        print(f"  Error getting RDS instances: {str(e)}")
         return [], None
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CHECK RDS USAGE
-# ============================================
+ 
 def check_rds_usage(db_instance_identifier):
     """
     Checks CloudWatch metrics to determine if RDS instance is being used
@@ -3410,7 +3403,7 @@ def check_rds_usage(db_instance_identifier):
     Returns: (avg_connections, avg_cpu, total_iops, is_idle)
     """
     try:
-        print(f"  📊 Checking usage metrics for {db_instance_identifier}...")
+        print(f"    Checking usage metrics for {db_instance_identifier}...")
         
         # Check last 7 days of usage
         end_time = datetime.now()
@@ -3505,31 +3498,31 @@ def check_rds_usage(db_instance_identifier):
         total_write_iops = sum(dp['Sum'] for dp in write_iops_datapoints)
         total_iops = total_read_iops + total_write_iops
         
-        print(f"  📊 Connections (7 days avg): {avg_connections:.2f}")
-        print(f"  📊 Max Connections: {max_connections:.0f}")
-        print(f"  📊 CPU Usage (7 days avg): {avg_cpu:.2f}%")
-        print(f"  📊 Total IOPS (7 days): {total_iops:.0f} (Read: {total_read_iops:.0f}, Write: {total_write_iops:.0f})")
+        print(f"    Connections (7 days avg): {avg_connections:.2f}")
+        print(f"    Max Connections: {max_connections:.0f}")
+        print(f"    CPU Usage (7 days avg): {avg_cpu:.2f}%")
+        print(f"    Total IOPS (7 days): {total_iops:.0f} (Read: {total_read_iops:.0f}, Write: {total_write_iops:.0f})")
         
         # Determine if idle
         # Idle criteria: < 1 connection on average AND < 100 IOPS total in 7 days
         is_idle = (avg_connections < 1.0 and total_iops < 100)
         
         if is_idle:
-            print(f"  ⚠️  RDS Instance appears IDLE (< 1 connection avg, < 100 IOPS)")
+            print(f"     RDS Instance appears IDLE (< 1 connection avg, < 100 IOPS)")
         else:
-            print(f"  ✅ RDS Instance is ACTIVE")
+            print(f"    RDS Instance is ACTIVE")
         
         return avg_connections, avg_cpu, total_iops, is_idle
     
     except Exception as e:
-        print(f"  ❌ Error checking metrics: {str(e)}")
+        print(f"    Error checking metrics: {str(e)}")
         # If can't get metrics, assume active (safer)
         return 0, 0, 0, False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: GET RDS COST ESTIMATE
-# ============================================
+ 
 def get_rds_cost(db_instance_class, engine):
     """
     Estimates monthly cost for RDS instance
@@ -3571,7 +3564,7 @@ def get_rds_cost(db_instance_class, engine):
         return estimated_cost
     else:
         # Unknown type - estimate based on size
-        print(f"  ⚠️  Unknown RDS instance type: {db_instance_class}")
+        print(f"     Unknown RDS instance type: {db_instance_class}")
         if 'micro' in db_instance_class:
             return 15
         elif 'small' in db_instance_class:
@@ -3586,9 +3579,9 @@ def get_rds_cost(db_instance_class, engine):
             return 500  # Conservative estimate for large instances
 
 
-# ============================================
+ 
 # HELPER FUNCTION: BACKUP RDS CONFIGURATION
-# ============================================
+ 
 def backup_rds_config(db_instance, rds_client):
     """
     Backs up complete RDS instance configuration to S3
@@ -3597,7 +3590,7 @@ def backup_rds_config(db_instance, rds_client):
     try:
         db_instance_identifier = db_instance['DBInstanceIdentifier']
         
-        print(f"  💾 Backing up RDS configuration...")
+        print(f"    Backing up RDS configuration...")
         
         # Basic DB instance details
         config = {
@@ -3649,21 +3642,21 @@ def backup_rds_config(db_instance, rds_client):
             ContentType='application/json'
         )
         
-        print(f"  ✅ RDS configuration backed up to S3")
+        print(f"    RDS configuration backed up to S3")
         print(f"  📁 s3://{S3_BUCKET}/{s3_key}")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Backup failed: {str(e)}")
+        print(f"    Backup failed: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CREATE RDS SNAPSHOT
-# ============================================
+ 
 def create_rds_snapshot(db_instance_identifier, rds_client):
     """
     Creates a final snapshot of the RDS instance before deletion
@@ -3673,7 +3666,7 @@ def create_rds_snapshot(db_instance_identifier, rds_client):
     try:
         snapshot_id = f"costguardian-final-{db_instance_identifier}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
-        print(f"  📸 Creating final RDS snapshot: {snapshot_id}")
+        print(f"    Creating final RDS snapshot: {snapshot_id}")
         
         response = rds_client.create_db_snapshot(
             DBSnapshotIdentifier=snapshot_id,
@@ -3694,19 +3687,19 @@ def create_rds_snapshot(db_instance_identifier, rds_client):
             ]
         )
         
-        print(f"  ✅ Snapshot creation initiated: {snapshot_id}")
-        print(f"  ⏳ Snapshot will complete in background (5-15 minutes depending on size)")
+        print(f"    Snapshot creation initiated: {snapshot_id}")
+        print(f"    Snapshot will complete in background (5-15 minutes depending on size)")
         
         return snapshot_id
     
     except Exception as e:
-        print(f"  ❌ Snapshot creation failed: {str(e)}")
+        print(f"    Snapshot creation failed: {str(e)}")
         return None
 
 
-# ============================================
+ 
 # HELPER FUNCTION: STOP RDS INSTANCE
-# ============================================
+ 
 def stop_rds_instance(db_instance_identifier, rds_client):
     """
     Stops an RDS instance (does not delete)
@@ -3716,15 +3709,15 @@ def stop_rds_instance(db_instance_identifier, rds_client):
     Returns: True if successful, False otherwise
     """
     try:
-        print(f"  🛑 Stopping RDS instance: {db_instance_identifier}")
+        print(f"    Stopping RDS instance: {db_instance_identifier}")
         
         rds_client.stop_db_instance(
             DBInstanceIdentifier=db_instance_identifier
         )
         
-        print(f"  ✅ RDS instance stop initiated")
-        print(f"  ⏳ Instance will stop in 2-5 minutes")
-        print(f"  ⚠️  AWS will AUTO-START this instance after 7 days!")
+        print(f"    RDS instance stop initiated")
+        print(f"    Instance will stop in 2-5 minutes")
+        print(f"     AWS will AUTO-START this instance after 7 days!")
         
         return True
     
@@ -3735,13 +3728,13 @@ def stop_rds_instance(db_instance_identifier, rds_client):
             print(f"  ℹ️  Instance already stopped or stopping")
             return True
         else:
-            print(f"  ❌ Error stopping instance: {error_message}")
+            print(f"    Error stopping instance: {error_message}")
             return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE RDS INSTANCE
-# ============================================
+ 
 def delete_rds_instance(db_instance_identifier, snapshot_id, rds_client):
     """
     Deletes an RDS instance permanently
@@ -3750,7 +3743,7 @@ def delete_rds_instance(db_instance_identifier, snapshot_id, rds_client):
     Returns: True if successful, False otherwise
     """
     try:
-        print(f"  🗑️  Deleting RDS instance: {db_instance_identifier}")
+        print(f"    Deleting RDS instance: {db_instance_identifier}")
         
         # Delete with final snapshot (we already created one, so skip automatic)
         rds_client.delete_db_instance(
@@ -3759,23 +3752,23 @@ def delete_rds_instance(db_instance_identifier, snapshot_id, rds_client):
             DeleteAutomatedBackups=False  # Keep automated backups for 7 days
         )
         
-        print(f"  ✅ RDS instance deletion initiated")
-        print(f"  ⏳ Instance will be deleted in 5-10 minutes")
-        print(f"  ⚠️  This action is PERMANENT - instance cannot be restarted")
-        print(f"  ✅ Snapshot preserved: {snapshot_id}")
+        print(f"    RDS instance deletion initiated")
+        print(f"    Instance will be deleted in 5-10 minutes")
+        print(f"     This action is PERMANENT - instance cannot be restarted")
+        print(f"    Snapshot preserved: {snapshot_id}")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Error deleting instance: {str(e)}")
+        print(f"    Error deleting instance: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND RDS ALERT
-# ============================================
+ 
 def send_rds_alert(db_instance, action, avg_connections, avg_cpu, total_iops, snapshot_id=None):
     """
     Sends email notification about RDS actions
@@ -3797,7 +3790,7 @@ def send_rds_alert(db_instance, action, avg_connections, avg_cpu, total_iops, sn
         estimated_cost = get_rds_cost(db_instance_class, engine)
         
         if action == 'IDLE_WARNING':
-            subject = f"⚠️ CostGuardian Alert - Idle RDS Database: {db_name}"
+            subject = f"  CostGuardian Alert - Idle RDS Database: {db_name}"
             
             message = f"""
 CostGuardian has detected an IDLE RDS database instance:
@@ -3819,7 +3812,7 @@ Avg Connections:  {avg_connections:.2f}
 Avg CPU:          {avg_cpu:.2f}%
 Total IOPS:       {total_iops:.0f}
 
-⚠️  This database has minimal activity!
+   This database has minimal activity!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST IMPACT
@@ -3827,12 +3820,12 @@ COST IMPACT
 Current Monthly Cost:  ${estimated_cost:.2f}
 Annual Cost:           ${estimated_cost * 12:.2f}
 
-💰 If deleted, you'll save ${estimated_cost:.2f}/month!
+  If deleted, you'll save ${estimated_cost:.2f}/month!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTIONS TAKEN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Configuration backed up to S3
+  Configuration backed up to S3
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NEXT STEPS
@@ -3854,7 +3847,7 @@ Backups: s3://{S3_BUCKET}/rds-configs/{db_instance_identifier}/
 """
         
         elif action == 'STOPPED':
-            subject = f"🛑 CostGuardian Alert - RDS Database STOPPED: {db_name}"
+            subject = f"  CostGuardian Alert - RDS Database STOPPED: {db_name}"
             
             message = f"""
 CostGuardian has STOPPED an idle RDS database:
@@ -3866,7 +3859,7 @@ Instance ID:      {db_instance_identifier}
 Name:             {db_name}
 Class:            {db_instance_class}
 Engine:           {engine} {engine_version}
-Status:           STOPPED 🛑
+Status:           STOPPED  
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 USAGE BEFORE STOPPING
@@ -3878,9 +3871,9 @@ Total IOPS:       {total_iops:.0f}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTIONS COMPLETED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Database STOPPED
-✅ Final snapshot created: {snapshot_id}
-✅ Configuration saved to S3
+  Database STOPPED
+  Final snapshot created: {snapshot_id}
+  Configuration saved to S3
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST IMPACT
@@ -3893,8 +3886,8 @@ Monthly Savings:   ${estimated_cost * 0.8:.2f} (~80% reduction)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IMPORTANT NOTES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️  AWS will AUTO-START this database after 7 days!
-⚠️  To prevent this, delete it or start it manually
+   AWS will AUTO-START this database after 7 days!
+   To prevent this, delete it or start it manually
 
 Grace Period: 7 days
 Deletion Date: {(datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')}
@@ -3922,13 +3915,13 @@ Instance ID:      {db_instance_identifier}
 Name:             {db_name}
 Class:            {db_instance_class}
 Engine:           {engine} {engine_version}
-Status:           DELETED 🗑️ (PERMANENT)
+Status:           DELETED  (PERMANENT)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST SAVINGS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 Monthly Savings:  ${estimated_cost:.2f}
-💰 Annual Savings:   ${estimated_cost * 12:.2f}
+  Monthly Savings:  ${estimated_cost:.2f}
+  Annual Savings:   ${estimated_cost * 12:.2f}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR BACKUPS (PRESERVED)
@@ -3943,7 +3936,7 @@ YOUR BACKUPS (PRESERVED)
    Location: RDS Console → Snapshots
    Retention: Until manually deleted
    
-   ⚠️  Snapshot storage costs ~$0.095/GB/month
+      Snapshot storage costs ~$0.095/GB/month
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TO RESTORE THIS DATABASE
@@ -3966,14 +3959,14 @@ TO RESTORE THIS DATABASE
             Message=message
         )
         
-        print(f"  📧 RDS alert email sent!")
+        print(f"    RDS alert email sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send RDS alert: {str(e)}")
+        print(f"    Failed to send RDS alert: {str(e)}")
         
-# ============================================
+ 
 # HELPER FUNCTION: GET ALL S3 BUCKETS
-# ============================================
+ 
 def get_all_s3_buckets():
     """
     Retrieves all S3 buckets in the account
@@ -3986,18 +3979,18 @@ def get_all_s3_buckets():
         
         buckets = response.get('Buckets', [])
         
-        print(f"📊 Found {len(buckets)} S3 bucket(s)")
+        print(f"  Found {len(buckets)} S3 bucket(s)")
         
         return buckets
     
     except Exception as e:
-        print(f"❌ Error getting S3 buckets: {str(e)}")
+        print(f"  Error getting S3 buckets: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CHECK IF BUCKET IS EMPTY
-# ============================================
+ 
 def is_bucket_empty(bucket_name):
     """
     Checks if an S3 bucket is completely empty
@@ -4041,13 +4034,13 @@ def is_bucket_empty(bucket_name):
         return is_empty, object_count, total_size_mb
     
     except Exception as e:
-        print(f"  ❌ Error checking bucket: {str(e)}")
+        print(f"    Error checking bucket: {str(e)}")
         return False, 0, 0
 
 
-# ============================================
+ 
 # HELPER FUNCTION: GET BUCKET TAGS
-# ============================================
+ 
 def get_bucket_tags(bucket_name):
     """
     Gets tags for an S3 bucket
@@ -4064,13 +4057,13 @@ def get_bucket_tags(bucket_name):
             # Bucket has no tags
             return {}
         else:
-            print(f"  ⚠️  Error getting tags: {str(e)}")
+            print(f"     Error getting tags: {str(e)}")
             return {}
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE EMPTY BUCKET
-# ============================================
+ 
 def delete_empty_bucket(bucket_name):
     """
     Deletes an empty S3 bucket
@@ -4078,22 +4071,22 @@ def delete_empty_bucket(bucket_name):
     Returns: True if successful, False otherwise
     """
     try:
-        print(f"  🗑️  Deleting empty bucket: {bucket_name}")
+        print(f"    Deleting empty bucket: {bucket_name}")
         
         s3_client.delete_bucket(Bucket=bucket_name)
         
-        print(f"  ✅ Bucket {bucket_name} deleted successfully")
+        print(f"    Bucket {bucket_name} deleted successfully")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Error deleting bucket: {str(e)}")
+        print(f"    Error deleting bucket: {str(e)}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: APPLY LIFECYCLE POLICY
-# ============================================
+ 
 def apply_lifecycle_policy(bucket_name):
     """
     Applies the 3-tier lifecycle policy to a bucket
@@ -4127,20 +4120,20 @@ def apply_lifecycle_policy(bucket_name):
             LifecycleConfiguration=lifecycle_config
         )
         
-        print(f"  ✅ Lifecycle policy applied successfully")
+        print(f"    Lifecycle policy applied successfully")
         print(f"     → 30 days: Standard → Standard-IA")
         print(f"     → 180 days: Standard-IA → Glacier Instant Retrieval")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Error applying lifecycle policy: {str(e)}")
+        print(f"    Error applying lifecycle policy: {str(e)}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND S3 ALERT
-# ============================================
+ 
 def send_s3_bucket_alert(bucket_name, action, object_count=0, size_mb=0):
     """
     Sends email notification about S3 bucket actions
@@ -4148,7 +4141,7 @@ def send_s3_bucket_alert(bucket_name, action, object_count=0, size_mb=0):
     """
     try:
         if action == 'EMPTY_WARNING':
-            subject = f"⚠️ CostGuardian Alert - Empty S3 Bucket: {bucket_name}"
+            subject = f"  CostGuardian Alert - Empty S3 Bucket: {bucket_name}"
             
             message = f"""
 CostGuardian has detected an EMPTY S3 bucket:
@@ -4160,7 +4153,7 @@ Bucket Name:      {bucket_name}
 Object Count:     0
 Total Size:       0 MB
 
-⚠️  This bucket is empty and costing money!
+   This bucket is empty and costing money!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST IMPACT
@@ -4194,7 +4187,7 @@ CostGuardian has DELETED an empty S3 bucket:
 BUCKET DETAILS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Bucket Name:      {bucket_name}
-Status:           DELETED 🗑️
+Status:           DELETED 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REASON
@@ -4209,7 +4202,7 @@ If you need this bucket:
 2. Use same name: {bucket_name}
 3. Configure settings as needed
 
-⚠️  Note: Bucket name may not be immediately available if recently deleted.
+   Note: Bucket name may not be immediately available if recently deleted.
 
 -- CostGuardian Cost Optimization System
 """
@@ -4230,9 +4223,9 @@ Total Size:       {size_mb:.2f} MB
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LIFECYCLE POLICY (3-TIER)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Day 0-30:   S3 Standard ($0.023/GB/month)
-✅ Day 30-180: S3 Standard-IA ($0.0125/GB/month) - 46% cheaper
-✅ Day 180+:   S3 Glacier Instant ($0.004/GB/month) - 83% cheaper
+  Day 0-30:   S3 Standard ($0.023/GB/month)
+  Day 30-180: S3 Standard-IA ($0.0125/GB/month) - 46% cheaper
+  Day 180+:   S3 Glacier Instant ($0.004/GB/month) - 83% cheaper
 
 All retrievals remain INSTANT (milliseconds).
 
@@ -4268,38 +4261,38 @@ S3 Console → {bucket_name} → Management → Delete lifecycle rule
             Message=message
         )
         
-        print(f"  📧 S3 bucket alert email sent!")
+        print(f"    S3 bucket alert email sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send S3 alert: {str(e)}")
+        print(f"    Failed to send S3 alert: {str(e)}")
 
-# ============================================
+ 
 # HELPER FUNCTION: GET ALL EBS VOLUMES
-# ============================================
+ 
 def get_all_ebs_volumes():
     """
     Retrieves all EBS volumes in the account/region
     Returns list of volume details
     """
     try:
-        print(f"\n💾 Scanning for EBS Volumes...")
+        print(f"\n  Scanning for EBS Volumes...")
         
         response = ec2_client.describe_volumes()
         
         volumes = response.get('Volumes', [])
         
-        print(f"📊 Found {len(volumes)} EBS volume(s)")
+        print(f"  Found {len(volumes)} EBS volume(s)")
         
         return volumes
     
     except Exception as e:
-        print(f"❌ Error getting EBS volumes: {str(e)}")
+        print(f"  Error getting EBS volumes: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: GET VOLUME COST
-# ============================================
+ 
 def get_ebs_volume_cost(volume_type, size_gb, iops=None):
     """
     Estimates monthly cost for EBS volume based on type and size
@@ -4332,9 +4325,9 @@ def get_ebs_volume_cost(volume_type, size_gb, iops=None):
     return base_cost
 
 
-# ============================================
+ 
 # HELPER FUNCTION: BACKUP EBS VOLUME CONFIG
-# ============================================
+ 
 def backup_ebs_volume_config(volume):
     """
     Backs up EBS volume configuration to S3
@@ -4343,7 +4336,7 @@ def backup_ebs_volume_config(volume):
     try:
         volume_id = volume['VolumeId']
         
-        print(f"  💾 Backing up EBS volume configuration...")
+        print(f"    Backing up EBS volume configuration...")
         
         # Get volume tags
         tags = {tag['Key']: tag['Value'] for tag in volume.get('Tags', [])}
@@ -4407,21 +4400,21 @@ def backup_ebs_volume_config(volume):
             ContentType='application/json'
         )
         
-        print(f"  ✅ EBS volume configuration backed up to S3")
+        print(f"    EBS volume configuration backed up to S3")
         print(f"  📁 s3://{S3_BUCKET}/{s3_key}")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Backup failed: {str(e)}")
+        print(f"    Backup failed: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CREATE EBS SNAPSHOT
-# ============================================
+ 
 def create_ebs_snapshot(volume_id, volume_name):
     """
     Creates a snapshot of the EBS volume before deletion
@@ -4431,7 +4424,7 @@ def create_ebs_snapshot(volume_id, volume_name):
     try:
         snapshot_description = f"CostGuardian final snapshot - {volume_name} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         
-        print(f"  📸 Creating EBS snapshot: {volume_id}")
+        print(f"    Creating EBS snapshot: {volume_id}")
         
         response = ec2_client.create_snapshot(
             VolumeId=volume_id,
@@ -4463,19 +4456,19 @@ def create_ebs_snapshot(volume_id, volume_name):
         
         snapshot_id = response['SnapshotId']
         
-        print(f"  ✅ Snapshot creation initiated: {snapshot_id}")
-        print(f"  ⏳ Snapshot will complete in background (5-30 minutes depending on size)")
+        print(f"    Snapshot creation initiated: {snapshot_id}")
+        print(f"    Snapshot will complete in background (5-30 minutes depending on size)")
         
         return snapshot_id
     
     except Exception as e:
-        print(f"  ❌ Snapshot creation failed: {str(e)}")
+        print(f"    Snapshot creation failed: {str(e)}")
         return None
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE EBS VOLUME
-# ============================================
+ 
 def delete_ebs_volume(volume_id):
     """
     Deletes an EBS volume
@@ -4484,11 +4477,11 @@ def delete_ebs_volume(volume_id):
     Returns: True if successful, False otherwise
     """
     try:
-        print(f"  🗑️  Deleting EBS volume: {volume_id}")
+        print(f"    Deleting EBS volume: {volume_id}")
         
         ec2_client.delete_volume(VolumeId=volume_id)
         
-        print(f"  ✅ EBS volume deleted successfully")
+        print(f"    EBS volume deleted successfully")
         
         return True
     
@@ -4499,16 +4492,16 @@ def delete_ebs_volume(volume_id):
             print(f"  ℹ️  Volume already deleted")
             return True
         elif 'VolumeInUse' in error_message:
-            print(f"  ❌ Volume is in use - cannot delete")
+            print(f"    Volume is in use - cannot delete")
             return False
         else:
-            print(f"  ❌ Error deleting volume: {error_message}")
+            print(f"    Error deleting volume: {error_message}")
             return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND EBS ALERT
-# ============================================
+ 
 def send_ebs_volume_alert(volume, action, snapshot_id=None):
     """
     Sends email notification about EBS volume actions
@@ -4534,7 +4527,7 @@ def send_ebs_volume_alert(volume, action, snapshot_id=None):
             last_instance = attachments[0].get('InstanceId', 'Unknown')
         
         if action == 'UNATTACHED_WARNING':
-            subject = f"⚠️ CostGuardian Alert - Unattached EBS Volume: {volume_name}"
+            subject = f"  CostGuardian Alert - Unattached EBS Volume: {volume_name}"
             
             message = f"""
 CostGuardian has detected an UNATTACHED EBS volume:
@@ -4547,7 +4540,7 @@ Name:             {volume_name}
 Size:             {size_gb} GB
 Type:             {volume_type}
 Zone:             {availability_zone}
-State:            {volume.get('State')} ⚠️
+State:            {volume.get('State')}  
 Encrypted:        {volume.get('Encrypted')}
 Created:          {volume.get('CreateTime')}
 Last Instance:    {last_instance if last_instance else 'Never attached'}
@@ -4558,12 +4551,12 @@ COST IMPACT
 Current Monthly Cost:  ${estimated_cost:.2f}
 Annual Cost:           ${estimated_cost * 12:.2f}
 
-💰 This volume is not attached to any instance but still costing money!
+  This volume is not attached to any instance but still costing money!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTIONS TAKEN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Configuration backed up to S3
+  Configuration backed up to S3
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NEXT STEPS
@@ -4597,13 +4590,13 @@ Volume ID:        {volume_id}
 Name:             {volume_name}
 Size:             {size_gb} GB
 Type:             {volume_type}
-Status:           DELETED 🗑️
+Status:           DELETED 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST SAVINGS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 Monthly Savings:  ${estimated_cost:.2f}
-💰 Annual Savings:   ${estimated_cost * 12:.2f}
+  Monthly Savings:  ${estimated_cost:.2f}
+  Annual Savings:   ${estimated_cost * 12:.2f}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR BACKUPS (PRESERVED)
@@ -4619,7 +4612,7 @@ YOUR BACKUPS (PRESERVED)
    Size: {size_gb} GB
    Cost: ~${size_gb * 0.05:.2f}/month (snapshot storage)
    
-   ⚠️  Snapshot will remain until you manually delete it
+      Snapshot will remain until you manually delete it
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TO RESTORE THIS VOLUME
@@ -4652,14 +4645,14 @@ EC2 Console → Snapshots → {snapshot_id} → Delete
             Message=message
         )
         
-        print(f"  📧 EBS volume alert email sent!")
+        print(f"    EBS volume alert email sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send EBS alert: {str(e)}")
+        print(f"    Failed to send EBS alert: {str(e)}")
         
-# ============================================
+ 
 # HELPER FUNCTION: GET ALL LOAD BALANCERS
-# ============================================
+ 
 def get_all_load_balancers():
     """
     Retrieves all Application and Network Load Balancers (ALB/NLB)
@@ -4672,18 +4665,18 @@ def get_all_load_balancers():
         
         load_balancers = response.get('LoadBalancers', [])
         
-        print(f"📊 Found {len(load_balancers)} ALB/NLB load balancer(s)")
+        print(f"  Found {len(load_balancers)} ALB/NLB load balancer(s)")
         
         return load_balancers
     
     except Exception as e:
-        print(f"❌ Error getting load balancers: {str(e)}")
+        print(f"  Error getting load balancers: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: GET CLASSIC LOAD BALANCERS
-# ============================================
+ 
 def get_all_classic_load_balancers():
     """
     Retrieves all Classic Load Balancers (CLB)
@@ -4696,18 +4689,18 @@ def get_all_classic_load_balancers():
         
         load_balancers = response.get('LoadBalancerDescriptions', [])
         
-        print(f"📊 Found {len(load_balancers)} Classic load balancer(s)")
+        print(f"  Found {len(load_balancers)} Classic load balancer(s)")
         
         return load_balancers
     
     except Exception as e:
-        print(f"❌ Error getting classic load balancers: {str(e)}")
+        print(f"  Error getting classic load balancers: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CHECK ALB/NLB USAGE
-# ============================================
+ 
 def check_load_balancer_usage(lb_arn, lb_name, lb_type):
     """
     Checks CloudWatch metrics to determine if ALB/NLB is being used
@@ -4721,7 +4714,7 @@ def check_load_balancer_usage(lb_arn, lb_name, lb_type):
     Returns: (healthy_targets, connections, bytes_processed, is_idle)
     """
     try:
-        print(f"  📊 Checking usage metrics for {lb_name}...")
+        print(f"    Checking usage metrics for {lb_name}...")
         
         # Extract load balancer namespace from ARN
         # ARN format: arn:aws:elasticloadbalancing:region:account:loadbalancer/app/name/id
@@ -4799,10 +4792,10 @@ def check_load_balancer_usage(lb_arn, lb_name, lb_type):
         total_bytes = sum(dp['Sum'] for dp in bytes_datapoints)
         total_mb = total_bytes / 1024 / 1024
         
-        print(f"  📊 Healthy Targets (avg): {avg_healthy:.1f}")
-        print(f"  📊 Max Healthy Targets: {max_healthy:.0f}")
-        print(f"  📊 Total Connections (7d): {total_connections:.0f}")
-        print(f"  📊 Processed Data (7d): {total_mb:.2f} MB")
+        print(f"    Healthy Targets (avg): {avg_healthy:.1f}")
+        print(f"    Max Healthy Targets: {max_healthy:.0f}")
+        print(f"    Total Connections (7d): {total_connections:.0f}")
+        print(f"    Processed Data (7d): {total_mb:.2f} MB")
         
         # Determine if idle
         is_idle = (
@@ -4812,23 +4805,23 @@ def check_load_balancer_usage(lb_arn, lb_name, lb_type):
         )
         
         if is_idle:
-            print(f"  ⚠️  Load Balancer appears IDLE (0 targets, minimal traffic)")
+            print(f"     Load Balancer appears IDLE (0 targets, minimal traffic)")
         else:
-            print(f"  ✅ Load Balancer is ACTIVE")
+            print(f"    Load Balancer is ACTIVE")
         
         return avg_healthy, total_connections, total_bytes, is_idle
     
     except Exception as e:
-        print(f"  ❌ Error checking metrics: {str(e)}")
+        print(f"    Error checking metrics: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         # If can't get metrics, assume active (safer)
         return 0, 0, 0, False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: BACKUP LOAD BALANCER CONFIG
-# ============================================
+ 
 def backup_load_balancer_config(lb, lb_type='application'):
     """
     Backs up complete load balancer configuration to S3
@@ -4838,7 +4831,7 @@ def backup_load_balancer_config(lb, lb_type='application'):
         lb_arn = lb['LoadBalancerArn']
         lb_name = lb['LoadBalancerName']
         
-        print(f"  💾 Backing up load balancer configuration...")
+        print(f"    Backing up load balancer configuration...")
         
         # Basic LB details
         config = {
@@ -4862,9 +4855,9 @@ def backup_load_balancer_config(lb, lb_type='application'):
         try:
             listeners_response = elbv2_client.describe_listeners(LoadBalancerArn=lb_arn)
             config['Listeners'] = listeners_response.get('Listeners', [])
-            print(f"    ✅ Captured {len(config['Listeners'])} listener(s)")
+            print(f"      Captured {len(config['Listeners'])} listener(s)")
         except Exception as e:
-            print(f"    ⚠️  Could not fetch listeners: {str(e)}")
+            print(f"       Could not fetch listeners: {str(e)}")
             config['Listeners'] = []
         
         # Get target groups
@@ -4881,9 +4874,9 @@ def backup_load_balancer_config(lb, lb_type='application'):
                 
                 config['TargetGroups'].append(tg)
             
-            print(f"    ✅ Captured {len(config['TargetGroups'])} target group(s)")
+            print(f"      Captured {len(config['TargetGroups'])} target group(s)")
         except Exception as e:
-            print(f"    ⚠️  Could not fetch target groups: {str(e)}")
+            print(f"       Could not fetch target groups: {str(e)}")
             config['TargetGroups'] = []
         
         # Get load balancer attributes
@@ -4891,7 +4884,7 @@ def backup_load_balancer_config(lb, lb_type='application'):
             attributes_response = elbv2_client.describe_load_balancer_attributes(LoadBalancerArn=lb_arn)
             config['Attributes'] = attributes_response.get('Attributes', [])
         except Exception as e:
-            print(f"    ⚠️  Could not fetch attributes: {str(e)}")
+            print(f"       Could not fetch attributes: {str(e)}")
             config['Attributes'] = []
         
         # Get tags
@@ -4900,7 +4893,7 @@ def backup_load_balancer_config(lb, lb_type='application'):
             if tags_response.get('TagDescriptions'):
                 config['Tags'] = tags_response['TagDescriptions'][0].get('Tags', [])
         except Exception as e:
-            print(f"    ⚠️  Could not fetch tags: {str(e)}")
+            print(f"       Could not fetch tags: {str(e)}")
             config['Tags'] = []
         
         # Calculate cost
@@ -4923,21 +4916,21 @@ def backup_load_balancer_config(lb, lb_type='application'):
             ContentType='application/json'
         )
         
-        print(f"  ✅ Load balancer configuration backed up to S3")
+        print(f"    Load balancer configuration backed up to S3")
         print(f"  📁 s3://{S3_BUCKET}/{s3_key}")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Backup failed: {str(e)}")
+        print(f"    Backup failed: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE LOAD BALANCER
-# ============================================
+ 
 def delete_load_balancer(lb_arn, lb_name):
     """
     Deletes an Application or Network Load Balancer
@@ -4945,23 +4938,23 @@ def delete_load_balancer(lb_arn, lb_name):
     Returns: True if successful, False otherwise
     """
     try:
-        print(f"  🗑️  Deleting load balancer: {lb_name}")
+        print(f"    Deleting load balancer: {lb_name}")
         
         elbv2_client.delete_load_balancer(LoadBalancerArn=lb_arn)
         
-        print(f"  ✅ Load balancer deletion initiated")
-        print(f"  ⏳ Deletion will complete in 2-5 minutes")
+        print(f"    Load balancer deletion initiated")
+        print(f"    Deletion will complete in 2-5 minutes")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Error deleting load balancer: {str(e)}")
+        print(f"    Error deleting load balancer: {str(e)}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND LOAD BALANCER ALERT
-# ============================================
+ 
 def send_load_balancer_alert(lb, action, healthy_targets, connections, bytes_processed):
     """
     Sends email notification about load balancer actions
@@ -4983,7 +4976,7 @@ def send_load_balancer_alert(lb, action, healthy_targets, connections, bytes_pro
         mb_processed = bytes_processed / 1024 / 1024
         
         if action == 'IDLE_WARNING':
-            subject = f"⚠️ CostGuardian Alert - Idle Load Balancer: {lb_name}"
+            subject = f"  CostGuardian Alert - Idle Load Balancer: {lb_name}"
             
             message = f"""
 CostGuardian has detected an IDLE load balancer:
@@ -5003,7 +4996,7 @@ Healthy Targets:  {healthy_targets:.0f}
 Connections:      {connections:.0f}
 Data Processed:   {mb_processed:.2f} MB
 
-⚠️  This load balancer has NO healthy targets and minimal traffic!
+   This load balancer has NO healthy targets and minimal traffic!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST IMPACT
@@ -5011,7 +5004,7 @@ COST IMPACT
 Current Monthly Cost:  ${monthly_cost:.2f}
 Annual Cost:           ${monthly_cost * 12:.2f}
 
-💰 If deleted, you'll save ${monthly_cost:.2f}/month!
+  If deleted, you'll save ${monthly_cost:.2f}/month!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NEXT STEPS
@@ -5043,13 +5036,13 @@ LOAD BALANCER DETAILS
 Name:             {lb_name}
 Type:             {lb_type.upper()}
 Previous DNS:     {dns_name}
-Status:           DELETED 🗑️
+Status:           DELETED 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST SAVINGS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 Monthly Savings:  ${monthly_cost:.2f}
-💰 Annual Savings:   ${monthly_cost * 12:.2f}
+  Monthly Savings:  ${monthly_cost:.2f}
+  Annual Savings:   ${monthly_cost * 12:.2f}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR BACKUPS (PRESERVED)
@@ -5073,7 +5066,7 @@ TO RECREATE THIS LOAD BALANCER
 4. Recreate listeners and target groups
 5. Update DNS records to new DNS name
 
-⚠️  Note: You'll get a new DNS name (old one is gone)
+   Note: You'll get a new DNS name (old one is gone)
 
 -- CostGuardian Cost Optimization System
 """
@@ -5087,14 +5080,14 @@ TO RECREATE THIS LOAD BALANCER
             Message=message
         )
         
-        print(f"  📧 Load balancer alert email sent!")
+        print(f"    Load balancer alert email sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send load balancer alert: {str(e)}")        
+        print(f"    Failed to send load balancer alert: {str(e)}")        
 
-# ============================================
+ 
 # HELPER FUNCTION: GET ALL VPCS
-# ============================================
+ 
 def get_all_vpcs():
     """
     Retrieves all VPCs in the region
@@ -5107,18 +5100,18 @@ def get_all_vpcs():
         
         vpcs = response.get('Vpcs', [])
         
-        print(f"📊 Found {len(vpcs)} VPC(s)")
+        print(f"  Found {len(vpcs)} VPC(s)")
         
         return vpcs
     
     except Exception as e:
-        print(f"❌ Error getting VPCs: {str(e)}")
+        print(f"  Error getting VPCs: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: CHECK IF VPC IS EMPTY
-# ============================================
+ 
 def is_vpc_empty(vpc_id):
     """
     Checks if a VPC has any resources using it
@@ -5126,7 +5119,7 @@ def is_vpc_empty(vpc_id):
     Returns: (is_empty, resource_count, resource_summary)
     """
     try:
-        print(f"  🔍 Checking resources in VPC {vpc_id}...")
+        print(f"    Checking resources in VPC {vpc_id}...")
         
         resource_summary = {
             'ec2_instances': 0,
@@ -5151,7 +5144,7 @@ def is_vpc_empty(vpc_id):
             for reservation in ec2_response['Reservations']:
                 resource_summary['ec2_instances'] += len(reservation['Instances'])
         except Exception as e:
-            print(f"    ⚠️  Error checking EC2: {str(e)}")
+            print(f"       Error checking EC2: {str(e)}")
         
         # Check 2: RDS Instances
         try:
@@ -5162,7 +5155,7 @@ def is_vpc_empty(vpc_id):
                 if db.get('DBSubnetGroup', {}).get('VpcId') == vpc_id:
                     resource_summary['rds_instances'] += 1
         except Exception as e:
-            print(f"    ⚠️  Error checking RDS: {str(e)}")
+            print(f"       Error checking RDS: {str(e)}")
         
         # Check 3: Load Balancers (ALB/NLB)
         try:
@@ -5172,7 +5165,7 @@ def is_vpc_empty(vpc_id):
                 if lb.get('VpcId') == vpc_id:
                     resource_summary['load_balancers'] += 1
         except Exception as e:
-            print(f"    ⚠️  Error checking Load Balancers: {str(e)}")
+            print(f"       Error checking Load Balancers: {str(e)}")
         
         # Check 4: NAT Gateways
         try:
@@ -5185,7 +5178,7 @@ def is_vpc_empty(vpc_id):
             
             resource_summary['nat_gateways'] = len(nat_response.get('NatGateways', []))
         except Exception as e:
-            print(f"    ⚠️  Error checking NAT Gateways: {str(e)}")
+            print(f"       Error checking NAT Gateways: {str(e)}")
         
         # Check 5: VPC Endpoints (Interface type - these cost money)
         try:
@@ -5198,13 +5191,13 @@ def is_vpc_empty(vpc_id):
             
             resource_summary['vpc_endpoints'] = len(endpoint_response.get('VpcEndpoints', []))
         except Exception as e:
-            print(f"    ⚠️  Error checking VPC Endpoints: {str(e)}")
+            print(f"       Error checking VPC Endpoints: {str(e)}")
         
         # Calculate totals
         total_resources = sum(resource_summary.values())
         
         # Print summary
-        print(f"    📊 Resource Count:")
+        print(f"      Resource Count:")
         print(f"       EC2 Instances: {resource_summary['ec2_instances']}")
         print(f"       RDS Instances: {resource_summary['rds_instances']}")
         print(f"       Load Balancers: {resource_summary['load_balancers']}")
@@ -5215,23 +5208,23 @@ def is_vpc_empty(vpc_id):
         is_empty = (total_resources == 0)
         
         if is_empty:
-            print(f"  ✅ VPC is EMPTY (no resources)")
+            print(f"    VPC is EMPTY (no resources)")
         else:
             print(f"  ℹ️  VPC has {total_resources} resource(s)")
         
         return is_empty, total_resources, resource_summary
     
     except Exception as e:
-        print(f"  ❌ Error checking VPC resources: {str(e)}")
+        print(f"    Error checking VPC resources: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         # If error checking, assume NOT empty (safer)
         return False, -1, {}
 
 
-# ============================================
+ 
 # HELPER FUNCTION: GET ORPHANED SUBNETS
-# ============================================
+ 
 def get_orphaned_subnets(vpc_id):
     """
     Gets all subnets in a VPC and checks which are orphaned
@@ -5239,7 +5232,7 @@ def get_orphaned_subnets(vpc_id):
     Returns: list of orphaned subnet IDs
     """
     try:
-        print(f"  🔍 Checking subnets in VPC {vpc_id}...")
+        print(f"    Checking subnets in VPC {vpc_id}...")
         
         # Get all subnets in VPC
         subnet_response = ec2_client.describe_subnets(
@@ -5261,20 +5254,20 @@ def get_orphaned_subnets(vpc_id):
             
             if len(network_interfaces) == 0:
                 orphaned_subnets.append(subnet)
-                print(f"    ⚠️  Orphaned subnet: {subnet_id} ({subnet.get('CidrBlock')})")
+                print(f"       Orphaned subnet: {subnet_id} ({subnet.get('CidrBlock')})")
             else:
-                print(f"    ✅ Active subnet: {subnet_id} ({len(network_interfaces)} network interfaces)")
+                print(f"      Active subnet: {subnet_id} ({len(network_interfaces)} network interfaces)")
         
         return orphaned_subnets
     
     except Exception as e:
-        print(f"  ❌ Error checking subnets: {str(e)}")
+        print(f"    Error checking subnets: {str(e)}")
         return []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: BACKUP VPC CONFIG
-# ============================================
+ 
 def backup_vpc_config(vpc):
     """
     Backs up complete VPC configuration to S3
@@ -5283,7 +5276,7 @@ def backup_vpc_config(vpc):
     try:
         vpc_id = vpc['VpcId']
         
-        print(f"  💾 Backing up VPC configuration...")
+        print(f"    Backing up VPC configuration...")
         
         # Basic VPC details
         config = {
@@ -5312,9 +5305,9 @@ def backup_vpc_config(vpc):
                 Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
             )
             config['Subnets'] = subnet_response.get('Subnets', [])
-            print(f"    ✅ Captured {len(config['Subnets'])} subnet(s)")
+            print(f"      Captured {len(config['Subnets'])} subnet(s)")
         except Exception as e:
-            print(f"    ⚠️  Could not fetch subnets: {str(e)}")
+            print(f"       Could not fetch subnets: {str(e)}")
             config['Subnets'] = []
         
         # Get Route Tables
@@ -5323,9 +5316,9 @@ def backup_vpc_config(vpc):
                 Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
             )
             config['RouteTables'] = rt_response.get('RouteTables', [])
-            print(f"    ✅ Captured {len(config['RouteTables'])} route table(s)")
+            print(f"      Captured {len(config['RouteTables'])} route table(s)")
         except Exception as e:
-            print(f"    ⚠️  Could not fetch route tables: {str(e)}")
+            print(f"       Could not fetch route tables: {str(e)}")
             config['RouteTables'] = []
         
         # Get Internet Gateways
@@ -5334,9 +5327,9 @@ def backup_vpc_config(vpc):
                 Filters=[{'Name': 'attachment.vpc-id', 'Values': [vpc_id]}]
             )
             config['InternetGateways'] = igw_response.get('InternetGateways', [])
-            print(f"    ✅ Captured {len(config['InternetGateways'])} internet gateway(s)")
+            print(f"      Captured {len(config['InternetGateways'])} internet gateway(s)")
         except Exception as e:
-            print(f"    ⚠️  Could not fetch internet gateways: {str(e)}")
+            print(f"       Could not fetch internet gateways: {str(e)}")
             config['InternetGateways'] = []
         
         # Get Security Groups
@@ -5345,9 +5338,9 @@ def backup_vpc_config(vpc):
                 Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
             )
             config['SecurityGroups'] = sg_response.get('SecurityGroups', [])
-            print(f"    ✅ Captured {len(config['SecurityGroups'])} security group(s)")
+            print(f"      Captured {len(config['SecurityGroups'])} security group(s)")
         except Exception as e:
-            print(f"    ⚠️  Could not fetch security groups: {str(e)}")
+            print(f"       Could not fetch security groups: {str(e)}")
             config['SecurityGroups'] = []
         
         # Get Network ACLs
@@ -5356,9 +5349,9 @@ def backup_vpc_config(vpc):
                 Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
             )
             config['NetworkAcls'] = nacl_response.get('NetworkAcls', [])
-            print(f"    ✅ Captured {len(config['NetworkAcls'])} network ACL(s)")
+            print(f"      Captured {len(config['NetworkAcls'])} network ACL(s)")
         except Exception as e:
-            print(f"    ⚠️  Could not fetch network ACLs: {str(e)}")
+            print(f"       Could not fetch network ACLs: {str(e)}")
             config['NetworkAcls'] = []
         
         # Save to S3
@@ -5373,21 +5366,21 @@ def backup_vpc_config(vpc):
             ContentType='application/json'
         )
         
-        print(f"  ✅ VPC configuration backed up to S3")
+        print(f"    VPC configuration backed up to S3")
         print(f"  📁 s3://{S3_BUCKET}/{s3_key}")
         
         return True
     
     except Exception as e:
-        print(f"  ❌ Backup failed: {str(e)}")
+        print(f"    Backup failed: {str(e)}")
         import traceback
-        print(f"  🔍 Traceback: {traceback.format_exc()}")
+        print(f"    Traceback: {traceback.format_exc()}")
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE ORPHANED SUBNETS
-# ============================================
+ 
 def delete_orphaned_subnets(vpc_id):
     """
     Deletes all orphaned subnets in a VPC
@@ -5409,29 +5402,29 @@ def delete_orphaned_subnets(vpc_id):
             subnet_id = subnet['SubnetId']
             
             try:
-                print(f"    🗑️  Deleting subnet: {subnet_id}")
+                print(f"      Deleting subnet: {subnet_id}")
                 
                 ec2_client.delete_subnet(SubnetId=subnet_id)
                 
                 deleted_subnets.append(subnet_id)
-                print(f"    ✅ Subnet deleted: {subnet_id}")
+                print(f"      Subnet deleted: {subnet_id}")
             
             except Exception as e:
-                print(f"    ❌ Failed to delete subnet {subnet_id}: {str(e)}")
+                print(f"      Failed to delete subnet {subnet_id}: {str(e)}")
         
         if len(deleted_subnets) > 0:
-            print(f"  ✅ Deleted {len(deleted_subnets)} orphaned subnet(s)")
+            print(f"    Deleted {len(deleted_subnets)} orphaned subnet(s)")
         
         return True, deleted_subnets
     
     except Exception as e:
-        print(f"  ❌ Error deleting subnets: {str(e)}")
+        print(f"    Error deleting subnets: {str(e)}")
         return False, []
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE VPC DEPENDENCIES
-# ============================================
+ 
 def delete_vpc_dependencies(vpc_id):
     """
     Deletes VPC dependencies that must be removed before VPC deletion:
@@ -5473,10 +5466,10 @@ def delete_vpc_dependencies(vpc_id):
                 ec2_client.delete_internet_gateway(InternetGatewayId=igw_id)
                 
                 summary['internet_gateways'] += 1
-                print(f"    ✅ Internet Gateway deleted: {igw_id}")
+                print(f"      Internet Gateway deleted: {igw_id}")
         
         except Exception as e:
-            print(f"    ⚠️  Error with Internet Gateways: {str(e)}")
+            print(f"       Error with Internet Gateways: {str(e)}")
         
         # Step 2: Delete non-default Security Groups
         try:
@@ -5493,18 +5486,18 @@ def delete_vpc_dependencies(vpc_id):
                     continue
                 
                 try:
-                    print(f"    🗑️  Deleting Security Group: {sg_name} ({sg_id})")
+                    print(f"      Deleting Security Group: {sg_name} ({sg_id})")
                     
                     ec2_client.delete_security_group(GroupId=sg_id)
                     
                     summary['security_groups'] += 1
-                    print(f"    ✅ Security Group deleted: {sg_id}")
+                    print(f"      Security Group deleted: {sg_id}")
                 
                 except Exception as e:
-                    print(f"    ⚠️  Could not delete SG {sg_id}: {str(e)}")
+                    print(f"       Could not delete SG {sg_id}: {str(e)}")
         
         except Exception as e:
-            print(f"    ⚠️  Error with Security Groups: {str(e)}")
+            print(f"       Error with Security Groups: {str(e)}")
         
         # Step 3: Delete non-main Route Tables
         try:
@@ -5522,24 +5515,24 @@ def delete_vpc_dependencies(vpc_id):
                 )
                 
                 if is_main:
-                    print(f"    ⏭️  Skipping main route table: {rt_id}")
+                    print(f"       Skipping main route table: {rt_id}")
                     continue
                 
                 try:
-                    print(f"    🗑️  Deleting Route Table: {rt_id}")
+                    print(f"      Deleting Route Table: {rt_id}")
                     
                     ec2_client.delete_route_table(RouteTableId=rt_id)
                     
                     summary['route_tables'] += 1
-                    print(f"    ✅ Route Table deleted: {rt_id}")
+                    print(f"      Route Table deleted: {rt_id}")
                 
                 except Exception as e:
-                    print(f"    ⚠️  Could not delete RT {rt_id}: {str(e)}")
+                    print(f"       Could not delete RT {rt_id}: {str(e)}")
         
         except Exception as e:
-            print(f"    ⚠️  Error with Route Tables: {str(e)}")
+            print(f"       Error with Route Tables: {str(e)}")
         
-        print(f"  ✅ Dependencies cleanup complete:")
+        print(f"    Dependencies cleanup complete:")
         print(f"     Internet Gateways: {summary['internet_gateways']}")
         print(f"     Security Groups: {summary['security_groups']}")
         print(f"     Route Tables: {summary['route_tables']}")
@@ -5547,13 +5540,13 @@ def delete_vpc_dependencies(vpc_id):
         return True, summary
     
     except Exception as e:
-        print(f"  ❌ Error cleaning dependencies: {str(e)}")
+        print(f"    Error cleaning dependencies: {str(e)}")
         return False, summary
 
 
-# ============================================
+ 
 # HELPER FUNCTION: DELETE VPC
-# ============================================
+ 
 def delete_vpc(vpc_id):
     """
     Deletes a VPC after all dependencies are removed
@@ -5561,27 +5554,27 @@ def delete_vpc(vpc_id):
     Returns: True if successful, False otherwise
     """
     try:
-        print(f"  🗑️  Deleting VPC: {vpc_id}")
+        print(f"    Deleting VPC: {vpc_id}")
         
         # Step 1: Delete orphaned subnets
         subnet_success, deleted_subnets = delete_orphaned_subnets(vpc_id)
         
         if not subnet_success:
-            print(f"  ❌ Failed to delete subnets - aborting VPC deletion")
+            print(f"    Failed to delete subnets - aborting VPC deletion")
             return False
         
         # Step 2: Delete VPC dependencies
         dep_success, dep_summary = delete_vpc_dependencies(vpc_id)
         
         if not dep_success:
-            print(f"  ⚠️  Some dependencies could not be deleted")
+            print(f"     Some dependencies could not be deleted")
         
         # Step 3: Delete the VPC itself
-        print(f"  🗑️  Deleting VPC: {vpc_id}")
+        print(f"    Deleting VPC: {vpc_id}")
         
         ec2_client.delete_vpc(VpcId=vpc_id)
         
-        print(f"  ✅ VPC deleted successfully: {vpc_id}")
+        print(f"    VPC deleted successfully: {vpc_id}")
         
         return True
     
@@ -5589,17 +5582,17 @@ def delete_vpc(vpc_id):
         error_message = str(e)
         
         if 'DependencyViolation' in error_message:
-            print(f"  ❌ VPC still has dependencies: {error_message}")
+            print(f"    VPC still has dependencies: {error_message}")
             print(f"  💡 Manual cleanup may be required")
         else:
-            print(f"  ❌ Error deleting VPC: {error_message}")
+            print(f"    Error deleting VPC: {error_message}")
         
         return False
 
 
-# ============================================
+ 
 # HELPER FUNCTION: SEND VPC ALERT
-# ============================================
+ 
 def send_vpc_alert(vpc, action, resource_count, resource_summary):
     """
     Sends email notification about VPC cleanup actions
@@ -5617,7 +5610,7 @@ def send_vpc_alert(vpc, action, resource_count, resource_summary):
                 break
         
         if action == 'IDLE_WARNING':
-            subject = f"⚠️ CostGuardian Alert - Empty VPC Detected: {vpc_name}"
+            subject = f"  CostGuardian Alert - Empty VPC Detected: {vpc_name}"
             
             message = f"""
 CostGuardian has detected an EMPTY VPC with no resources:
@@ -5639,7 +5632,7 @@ Load Balancers:   {resource_summary.get('load_balancers', 0)}
 NAT Gateways:     {resource_summary.get('nat_gateways', 0)}
 VPC Endpoints:    {resource_summary.get('vpc_endpoints', 0)}
 
-⚠️  This VPC has no resources and may be leftover from testing!
+   This VPC has no resources and may be leftover from testing!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST IMPACT
@@ -5650,7 +5643,7 @@ potential security confusion.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTIONS TAKEN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Complete VPC configuration backed up to S3
+  Complete VPC configuration backed up to S3
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NEXT STEPS
@@ -5682,16 +5675,16 @@ VPC DETAILS
 VPC ID:           {vpc_id}
 Name:             {vpc_name}
 CIDR Block:       {cidr_block}
-Status:           DELETED 🗑️
+Status:           DELETED 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CLEANUP PERFORMED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Orphaned subnets deleted
-✅ Internet Gateways detached and deleted
-✅ Non-default Security Groups deleted
-✅ Non-main Route Tables deleted
-✅ VPC deleted
+  Orphaned subnets deleted
+  Internet Gateways detached and deleted
+  Non-default Security Groups deleted
+  Non-main Route Tables deleted
+  VPC deleted
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR BACKUPS (PRESERVED)
@@ -5731,10 +5724,10 @@ from the S3 backup configuration.
             Message=message
         )
         
-        print(f"  📧 VPC alert email sent!")
+        print(f"    VPC alert email sent!")
     
     except Exception as e:
-        print(f"  ❌ Failed to send VPC alert: {str(e)}")
+        print(f"    Failed to send VPC alert: {str(e)}")
 
 
 
@@ -5743,19 +5736,19 @@ def validate_configuration():
     try:
         # Check S3 bucket exists
         s3_client.head_bucket(Bucket=S3_BUCKET)
-        print(f"✅ S3 bucket validated: {S3_BUCKET}")
+        print(f"  S3 bucket validated: {S3_BUCKET}")
         
         # Check DynamoDB table exists
         dynamodb.Table(DYNAMODB_TABLE).table_status
-        print(f"✅ DynamoDB table validated: {DYNAMODB_TABLE}")
+        print(f"  DynamoDB table validated: {DYNAMODB_TABLE}")
         
         # Check SNS topic exists
         sns_client.get_topic_attributes(TopicArn=SNS_TOPIC_ARN)
-        print(f"✅ SNS topic validated")
+        print(f"  SNS topic validated")
         
         return True
     except Exception as e:
-        print(f"❌ Configuration error: {str(e)}")
+        print(f"  Configuration error: {str(e)}")
         print("Please check:")
         print(f"  - S3 bucket: {S3_BUCKET}")
         print(f"  - DynamoDB table: {DYNAMODB_TABLE}")
