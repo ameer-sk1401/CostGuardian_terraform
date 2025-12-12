@@ -7,7 +7,7 @@ Region: us-east-1 (update for other regions)
 
 # Hourly rates in USD
 AWS_PRICING = {
-    'us-west-1': {
+    'us-east-1': {
         # EC2 Instance Pricing (On-Demand, Linux)
         'EC2': {
             # T2 Family
@@ -103,13 +103,20 @@ AWS_PRICING = {
         
         # VPC Endpoints (Interface)
         'VPC_ENDPOINT': 0.01,  # per hour per AZ
+        
+        # S3 Buckets (storage cost - minimal, mainly saves management overhead)
+        'S3_BUCKET': 0.0,  # $0 (storage is per GB, but bucket deletion saves complexity)
+        
+        # VPC and Subnet (no direct cost, but organizational savings)
+        'VPC': 0.0,
+        'SUBNET': 0.0,
     }
 }
 
 # Monthly multiplier (730 hours average per month)
 HOURS_PER_MONTH = 730
 
-def get_hourly_rate(resource_type, instance_type, region='us-east-1'):
+def get_hourly_rate(resource_type, instance_type, region='us-west-1'):
     """
     Get hourly rate for a resource
     
@@ -124,9 +131,11 @@ def get_hourly_rate(resource_type, instance_type, region='us-east-1'):
     try:
         region_pricing = AWS_PRICING.get(region, {})
         
-        if resource_type in ['NAT_GATEWAY', 'ALB', 'NLB', 'ELB', 'EIP', 'VPC_ENDPOINT']:
+        # Resources with fixed hourly rates (no instance type needed)
+        if resource_type in ['NAT_GATEWAY', 'ALB', 'NLB', 'ELB', 'EIP', 'VPC_ENDPOINT', 'S3_BUCKET', 'VPC', 'SUBNET']:
             return region_pricing.get(resource_type, 0.0)
         
+        # Resources with instance-specific pricing
         service_pricing = region_pricing.get(resource_type, {})
         return service_pricing.get(instance_type, 0.0)
     
@@ -134,7 +143,7 @@ def get_hourly_rate(resource_type, instance_type, region='us-east-1'):
         print(f"Error getting pricing: {e}")
         return 0.0
 
-def calculate_monthly_savings(resource_type, instance_type, region='us-east-1'):
+def calculate_monthly_savings(resource_type, instance_type, region='us-west-1'):
     """
     Calculate monthly savings for a resource
     
@@ -165,5 +174,7 @@ SERVICE_NAMES = {
     'EIP': 'Elastic IPs',
     'VPC': 'VPCs',
     'VPC_ENDPOINT': 'VPC Endpoints',
-    'S3': 'S3 Buckets'
+    'S3': 'S3 Buckets',
+    'S3_BUCKET': 'S3 Buckets',  # Handle both S3 and S3_BUCKET
+    'SUBNET': 'Subnets'
 }

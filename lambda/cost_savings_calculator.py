@@ -26,7 +26,7 @@ s3_client = boto3.client('s3')
 # Environment variables
 DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE')
 S3_BUCKET = os.environ.get('S3_BUCKET_NAME')
-AWS_REGION = os.environ.get('REGION', 'us-east-1')
+AWS_REGION = os.environ.get('REGION', 'us-west-1')
 
 # DynamoDB table
 table = dynamodb.Table(DYNAMODB_TABLE)
@@ -149,8 +149,16 @@ def calculate_savings(month):
     for resource in deleted_resources:
         resource_type = resource.get('ResourceType', 'Unknown')
         resource_id = resource.get('ResourceId', 'Unknown')
-        instance_type = resource.get('InstanceType', 'Unknown')
         timestamp = int(resource.get('Timestamp', 0))
+        
+        # Get instance type (or use resource type for services without instance types)
+        if resource_type in ['NAT_GATEWAY', 'ALB', 'NLB', 'ELB', 'EIP', 'VPC_ENDPOINT', 'S3_BUCKET', 'VPC', 'SUBNET']:
+            instance_type = resource_type  # Use resource type itself
+        elif resource_type == 'EBS':
+            # EBS volumes - get volume type or size
+            instance_type = resource.get('VolumeType', 'gp3')
+        else:
+            instance_type = resource.get('InstanceType', resource.get('DBInstanceClass', 'Unknown'))
         
         # Calculate savings
         monthly_savings = calculate_monthly_savings(resource_type, instance_type, AWS_REGION)
