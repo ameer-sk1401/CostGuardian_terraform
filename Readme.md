@@ -210,7 +210,7 @@ For automated deployments:
    - Infrastructure changes require approval
    - Lambda code updates deploy automatically
 
-See [GITHUB_ACTIONS_GUIDE.md](GITHUB_ACTIONS_GUIDE.md) for details.
+
 
 ---
 
